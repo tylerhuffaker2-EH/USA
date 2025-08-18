@@ -2,39 +2,28 @@
 
 This is a Python-based, turn-based political simulation of the United States. It focuses on backend mechanics: political structure, elections, policies/legislation, economy, public opinion, and events.
 
-Highlights:
-- Modular classes: UnitedStates, State, PoliticalParty, Election, Policy, PublicOpinion, EventManager.
-- Turn-based month/quarter time step.
-- AI stubs for parties/states to make decisions.
-- Deterministic RNG seed option for reproducibility.
+## Features
 
-## Quick start
+- **Granular Elections**: District-based House elections, Senate staggering, and state-level voter modeling.
+- **AI Decision-Making**: States and parties propose policies, react to events, and campaign based on public opinion, budgets, and events.
+- **Serialization**: Save and load simulation state to/from JSON for deterministic continuation.
+- **Turn-Based System**: Advance the simulation month by month, handling elections, AI decisions, and events.
 
-Requirements: Python 3.10+
+## Updated Quick Start
 
-Run a short demo (12 months):
-
-```powershell
-python -m usa.main --months 12 --seed 42
-```
-
-Run unit tests:
+Run the simulation demo (includes save/load):
 
 ```powershell
-python -m unittest discover -s tests -p "test_*.py" -v
+python examples/simulation_demo.py
 ```
 
-Examples:
+## Recent Updates
 
-```powershell
-# Snapshot demo
-python -m examples.snapshot_demo
-
-# Manual interactions demo (advancing turns, policy, event, election)
-python -m examples.manual_demo
-```
+- Added save/load functionality for the simulation state.
+- Enhanced AI logic for state and party decision-making.
+- Integrated granular election mechanics and voter modeling.
+- Created a sample script demonstrating election simulation, policy passing, and AI decision-making.
 
 ## Notes
 - This is a backend prototype; no UI yet.
 - Economics and political mechanics are simplified placeholders with realistic levers to extend later.
-- Save/load can be added by serializing `UnitedStates` state to JSON.
