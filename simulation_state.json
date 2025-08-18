@@ -4,9 +4,9 @@
         "month": 8
     },
     "macro": {
-        "growth": 0.04,
-        "unemployment": 5.0,
-        "inflation": 2.6
+        "growth": 0.0762729713291463,
+        "unemployment": 3.3721776608808716,
+        "inflation": 2.6217031849362793
     },
     "federal": {
         "president": {
@@ -21,26 +21,27 @@
             "lean": "Democrat"
         },
         "budget": {
-            "revenue": 3500.0,
-            "spending": 4500.0,
+            "revenue": 0.0,
+            "spending": 6100.0,
             "tax_rate": 0.18
         },
         "opinion": {
-            "approval_president": 50.0,
-            "approval_congress": 30.0,
+            "approval_president": 55.886485958452774,
+            "approval_congress": 34.59639912337364,
             "issue_support": {
-                "Green Energy Initiative": 66.50849173924502
+                "Infrastructure": 50.67056710523819,
+                "Green Energy Initiative": 70.49439909144037
             }
         }
     },
     "parties": {
         "Democrat": {
             "name": "Democrat",
-            "national_approval": 44.88799999999998
+            "national_approval": 48.21265252140364
         },
         "Republican": {
             "name": "Republican",
-            "national_approval": 63.75714285714287
+            "national_approval": 100.0
         }
     },
     "states": {},
@@ -674,23 +675,20 @@
             3211712661,
             1320598276,
             935579968,
-            4
+            182
         ],
         null
     ],
     "log": [
-        "[2025-09] Turn advanced: AI decisions and elections processed.",
-        "[2025-10] Turn advanced: AI decisions and elections processed.",
-        "[2025-11] Turn advanced: AI decisions and elections processed.",
-        "[2025-12] Turn advanced: AI decisions and elections processed.",
-        "[2026-01] Turn advanced: AI decisions and elections processed.",
-        "[2026-02] Turn advanced: AI decisions and elections processed.",
-        "[2026-03] Turn advanced: AI decisions and elections processed.",
-        "[2026-04] Turn advanced: AI decisions and elections processed.",
-        "[2026-05] Turn advanced: AI decisions and elections processed.",
-        "[2026-06] Turn advanced: AI decisions and elections processed.",
-        "[2026-07] Turn advanced: AI decisions and elections processed.",
-        "[2026-08] Turn advanced: AI decisions and elections processed.",
+        "[2025-08] Policy passed: Infrastructure",
+        "[2025-09] Policy passed: Infrastructure",
+        "[2025-10] Policy failed: Infrastructure",
+        "[2025-11] Policy passed: Infrastructure",
+        "[2025-12] Policy passed: Infrastructure",
+        "[2026-03] Policy passed: Infrastructure",
+        "[2026-05] Policy passed: Infrastructure",
+        "[2026-06] Policy passed: Infrastructure",
+        "[2026-07] Policy passed: Infrastructure",
         "[2026-08] Policy passed: Green Energy Initiative"
     ],
     "recent_events": []

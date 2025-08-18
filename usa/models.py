@@ -220,7 +220,11 @@ class State:
     # Elections
     house_districts: List[District] = field(default_factory=list)
     senate_seats: List[PartyID] = field(default_factory=lambda: [PartyID.INDEPENDENT, PartyID.INDEPENDENT])
-    senate_classes: List[int] = field(default_factory=lambda: [0, 3])  # which cycle years mod 6 when up
+    senate_classes: List[int] = field(default_factory=lambda: [0, 1])  # Senate class for each seat: 0,1,2
+    # Statewide lean and turnout bias for dynamic elections
+    # Positive values favor Democrats; negative favor Republicans.
+    state_partisan_lean: float = 0.0   # typical range ~[-0.1, 0.1]; shifts baseline probability
+    state_turnout_bias: float = 0.0    # typical range ~[-0.05, 0.05]; adds small turnout-driven tilt
 
     # Simple state economy tick
     def advance_economy(self, growth: float, nat_inflation: float, rng: random.Random) -> None:
@@ -252,6 +256,8 @@ class State:
             "house_districts": [d.to_dict() for d in self.house_districts],
             "senate_seats": [p.value for p in self.senate_seats],
             "senate_classes": list(self.senate_classes),
+            "state_partisan_lean": self.state_partisan_lean,
+            "state_turnout_bias": self.state_turnout_bias,
         }
 
     @classmethod
@@ -274,7 +280,9 @@ class State:
         st.voter_cohorts = [VoterCohort.from_dict(d) for d in data.get("voter_cohorts", [])]
         st.house_districts = [District.from_dict(d) for d in data.get("house_districts", [])]
         st.senate_seats = [PartyID(p) for p in data.get("senate_seats", [PartyID.INDEPENDENT.value, PartyID.INDEPENDENT.value])]
-        st.senate_classes = list(data.get("senate_classes", [0, 3]))
+        st.senate_classes = list(data.get("senate_classes", [0, 1]))
+        st.state_partisan_lean = float(data.get("state_partisan_lean", 0.0))
+        st.state_turnout_bias = float(data.get("state_turnout_bias", 0.0))
         return st
 
 
@@ -537,8 +545,15 @@ class UnitedStates:
         if not st.senate_seats or len(st.senate_seats) != 2:
             st.senate_seats = [st.legislature.senate, st.legislature.senate]
         if not st.senate_classes or len(st.senate_classes) != 2:
-            # distribute classes; keep defaults but randomize the second to spread
-            st.senate_classes = [self.rng.randrange(0, 6), (self.rng.randrange(0, 6))]
+            # assign two different classes among 0,1,2
+            first = self.rng.randrange(0, 3)
+            second = (first + self.rng.randrange(1, 3)) % 3
+            st.senate_classes = [first, second]
+        # initialize lean/turnout bias with small random tilt if default
+        if abs(st.state_partisan_lean) < 1e-9:
+            st.state_partisan_lean = self.rng.uniform(-0.06, 0.06)
+        if abs(st.state_turnout_bias) < 1e-9:
+            st.state_turnout_bias = self.rng.uniform(-0.03, 0.03)
 
     def _national_signal_dem(self) -> float:
         economy_signal = self.growth - self.inflation * 0.2 - self.unemployment * 0.3
@@ -551,6 +566,12 @@ class UnitedStates:
         return gov * (1 if st.governor_party == PartyID.DEMOCRAT else -1) + leg * (1 if st.legislature.house == PartyID.DEMOCRAT else -1)
 
     def _district_dem_probability(self, st: State, d: District) -> float:
+        """Estimate Democratic win probability for a House district.
+
+        Incorporates cohort composition and turnout, district swing and turnout bias,
+        national and state signals, incumbency, plus state-level partisan lean and
+        turnout tilt for more dynamic results.
+        """
         # cohort partisan tendency
         score = 0.0
         for c in d.cohorts:
@@ -569,11 +590,14 @@ class UnitedStates:
         # national and state signals
         base += self._national_signal_dem()
         base += 0.5 * self._state_signal_dem(st)
+        # state-level lean and turnout bias
+        base += st.state_partisan_lean + 0.5 * st.state_turnout_bias
         # noise
         base += self.rng.uniform(-0.03, 0.03)
         return max(0.05, min(0.95, base))
 
     def _statewide_dem_probability(self, st: State, incumbent: PartyID) -> float:
+        """Estimate Democratic win probability for statewide races (Senate, Governor)."""
         # Aggregate cohorts statewide
         score = 0.0
         for c in (st.voter_cohorts or []):
@@ -582,6 +606,7 @@ class UnitedStates:
             elif c.lean == PartyID.REPUBLICAN:
                 score += c.share * c.turnout * -1.0
         base = 0.5 + 0.12 * score + 0.5 * self._state_signal_dem(st) + self._national_signal_dem()
+        base += st.state_partisan_lean + 0.5 * st.state_turnout_bias
         if incumbent == PartyID.DEMOCRAT:
             base += 0.02
         elif incumbent == PartyID.REPUBLICAN:
@@ -826,14 +851,18 @@ class UnitedStates:
             self.congress.house_control = PartyID.DEMOCRAT if dem_seats >= rep_seats else PartyID.REPUBLICAN
             self.log_event(f"House elections (granular): D {dem_seats} - R {rep_seats}")
 
-        # Senate: seats up based on class == year % 6
+        # Senate: 6-year terms staggered across 3 classes (0,1,2).
+        # Elections happen every even year; class up if (year//2) % 3 matches seat class.
         dem_total = 0
         rep_total = 0
-        cycle = year % 6
+        if year % 2 == 0:
+            sen_cycle = (year // 2) % 3
+        else:
+            sen_cycle = None  # odd years: no Senate elections
         for st in self.states.values():
             for i in range(2):
                 inc = st.senate_seats[i]
-                if st.senate_classes[i] == cycle:
+                if sen_cycle is not None and st.senate_classes[i] == sen_cycle:
                     p_dem = self._statewide_dem_probability(st, inc)
                     winner = PartyID.DEMOCRAT if self.rng.random() < p_dem else PartyID.REPUBLICAN
                     st.senate_seats[i] = winner
@@ -1012,7 +1041,16 @@ class UnitedStates:
                 st.senate_seats = [st.legislature.senate, st.legislature.senate]
             if not st.senate_classes or len(st.senate_classes) != 2:
                 rnd2 = random.Random(seed + 2 if seed is not None else None)
-                st.senate_classes = [rnd2.randrange(0, 6), rnd2.randrange(0, 6)]
+                first = rnd2.randrange(0, 3)
+                second = (first + rnd2.randrange(1, 3)) % 3
+                st.senate_classes = [first, second]
+            # initialize state lean/turnout bias
+            if abs(st.state_partisan_lean) < 1e-9:
+                rnd3 = random.Random(seed + 3 if seed is not None else None)
+                st.state_partisan_lean = rnd3.uniform(-0.06, 0.06)
+            if abs(st.state_turnout_bias) < 1e-9:
+                rnd4 = random.Random(seed + 4 if seed is not None else None)
+                st.state_turnout_bias = rnd4.uniform(-0.03, 0.03)
         budget = FederalBudget(revenue=4500.0, spending=5200.0)
         president = President(name="Incumbent", party=PartyID.DEMOCRAT)
         congress = Congress(house_control=PartyID.DEMOCRAT, senate_control=PartyID.DEMOCRAT)
@@ -1141,30 +1179,7 @@ class UnitedStates:
         us.recent_events = list(data.get("recent_events", []))
         return us
 
-    # --- advance_turn method ---
-    def advance_turn(self) -> None:
-        """Advance the simulation by one month, handling elections, AI decisions, and events."""
-        # Increment time
-        self.month += 1
-        if self.month > 12:
-            self.month = 1
-            self.year += 1
-
-        # AI decisions for states
-        for state in self.states.values():
-            self.ai_state_turn(state)
-
-        # AI national strategy
-        self.ai_party_national_strategy()
-
-        # React to recent events
-        self.ai_react_to_events()
-
-        # Run elections if applicable
-        self.maybe_run_elections()
-
-        # Log the state
-        self.log_event("Turn advanced: AI decisions and elections processed.")
+    
 
     def save_to_file(self, file_path: str) -> None:
         """Save the current state to a JSON file."""
