@@ -1,0 +1,1 @@
+"""USA Political Simulation package."""
