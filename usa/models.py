@@ -169,6 +169,34 @@ class VoterCohort:
 
 
 @dataclass
+class District:
+    id: str
+    cohorts: List[VoterCohort]
+    incumbent: PartyID = PartyID.INDEPENDENT
+    turnout_bias: float = 0.0  # -0.1..+0.1
+    swing: float = 0.0  # -0.2..+0.2 partisan lean where + favors DEM
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.id,
+            "cohorts": [c.to_dict() for c in self.cohorts],
+            "incumbent": self.incumbent.value,
+            "turnout_bias": self.turnout_bias,
+            "swing": self.swing,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, object]) -> "District":
+        return cls(
+            id=str(data["id"]),
+            cohorts=[VoterCohort.from_dict(d) for d in data.get("cohorts", [])],
+            incumbent=PartyID(data.get("incumbent", PartyID.INDEPENDENT.value)),
+            turnout_bias=float(data.get("turnout_bias", 0.0)),
+            swing=float(data.get("swing", 0.0)),
+        )
+
+
+@dataclass
 class State:
     name: str
     population: int
@@ -189,6 +217,10 @@ class State:
         "agriculture": 0.08,
     })
     voter_cohorts: List[VoterCohort] = field(default_factory=list)
+    # Elections
+    house_districts: List[District] = field(default_factory=list)
+    senate_seats: List[PartyID] = field(default_factory=lambda: [PartyID.INDEPENDENT, PartyID.INDEPENDENT])
+    senate_classes: List[int] = field(default_factory=lambda: [0, 3])  # which cycle years mod 6 when up
 
     # Simple state economy tick
     def advance_economy(self, growth: float, nat_inflation: float, rng: random.Random) -> None:
@@ -217,6 +249,9 @@ class State:
             "tax_rate": self.tax_rate,
             "gdp_sectors": copy.deepcopy(self.gdp_sectors),
             "voter_cohorts": [c.to_dict() for c in self.voter_cohorts],
+            "house_districts": [d.to_dict() for d in self.house_districts],
+            "senate_seats": [p.value for p in self.senate_seats],
+            "senate_classes": list(self.senate_classes),
         }
 
     @classmethod
@@ -237,6 +272,9 @@ class State:
             gdp_sectors=dict(data.get("gdp_sectors", {})),
         )
         st.voter_cohorts = [VoterCohort.from_dict(d) for d in data.get("voter_cohorts", [])]
+        st.house_districts = [District.from_dict(d) for d in data.get("house_districts", [])]
+        st.senate_seats = [PartyID(p) for p in data.get("senate_seats", [PartyID.INDEPENDENT.value, PartyID.INDEPENDENT.value])]
+        st.senate_classes = list(data.get("senate_classes", [0, 3]))
         return st
 
 
@@ -471,6 +509,100 @@ class UnitedStates:
     def log_event(self, msg: str) -> None:
         self.log.append(f"[{self.year}-{self.month:02d}] {msg}")
 
+    # --- election helpers ---
+    def _init_state_elections_if_missing(self, st: State) -> None:
+        if not st.voter_cohorts:
+            st.voter_cohorts = [
+                VoterCohort(name="Urban Dem", share=0.4, lean=PartyID.DEMOCRAT, turnout=0.62),
+                VoterCohort(name="Suburban Rep", share=0.4, lean=PartyID.REPUBLICAN, turnout=0.61),
+                VoterCohort(name="Independent", share=0.2, lean=PartyID.INDEPENDENT, turnout=0.48),
+            ]
+        if not st.house_districts:
+            # Create 6 districts with slight variations
+            for i in range(6):
+                swing = self.rng.uniform(-0.04, 0.04)
+                bias = self.rng.uniform(-0.03, 0.03)
+                # vary cohort shares a bit
+                cohorts = []
+                for c in st.voter_cohorts:
+                    delta = self.rng.uniform(-0.05, 0.05)
+                    share = max(0.05, min(0.9, c.share + delta))
+                    cohorts.append(VoterCohort(name=c.name, share=share, lean=c.lean, turnout=c.turnout))
+                # normalize shares
+                total = sum(c.share for c in cohorts)
+                for c in cohorts:
+                    c.share = c.share / total
+                st.house_districts.append(District(id=f"{st.name}-{i+1}", cohorts=cohorts, turnout_bias=bias, swing=swing))
+        if not st.senate_seats or len(st.senate_seats) != 2:
+            st.senate_seats = [st.legislature.senate, st.legislature.senate]
+        if not st.senate_classes or len(st.senate_classes) != 2:
+            # distribute classes; keep defaults but randomize the second to spread
+            st.senate_classes = [self.rng.randrange(0, 6), (self.rng.randrange(0, 6))]
+
+    def _national_signal_dem(self) -> float:
+        economy_signal = self.growth - self.inflation * 0.2 - self.unemployment * 0.3
+        approval_signal = self.opinion.approval_president - 50.0
+        return 0.02 * economy_signal + 0.01 * approval_signal
+
+    def _state_signal_dem(self, st: State) -> float:
+        gov = (st.approval_governor - 50.0) / 200.0
+        leg = (st.approval_legislature - 40.0) / 200.0
+        return gov * (1 if st.governor_party == PartyID.DEMOCRAT else -1) + leg * (1 if st.legislature.house == PartyID.DEMOCRAT else -1)
+
+    def _district_dem_probability(self, st: State, d: District) -> float:
+        # cohort partisan tendency
+        score = 0.0
+        for c in d.cohorts:
+            if c.lean == PartyID.DEMOCRAT:
+                score += c.share * c.turnout * 1.0
+            elif c.lean == PartyID.REPUBLICAN:
+                score += c.share * c.turnout * -1.0
+            else:
+                score += c.share * c.turnout * 0.0
+        base = 0.5 + 0.15 * score + d.swing + d.turnout_bias
+        # incumbency modest advantage
+        if d.incumbent == PartyID.DEMOCRAT:
+            base += 0.02
+        elif d.incumbent == PartyID.REPUBLICAN:
+            base -= 0.02
+        # national and state signals
+        base += self._national_signal_dem()
+        base += 0.5 * self._state_signal_dem(st)
+        # noise
+        base += self.rng.uniform(-0.03, 0.03)
+        return max(0.05, min(0.95, base))
+
+    def _statewide_dem_probability(self, st: State, incumbent: PartyID) -> float:
+        # Aggregate cohorts statewide
+        score = 0.0
+        for c in (st.voter_cohorts or []):
+            if c.lean == PartyID.DEMOCRAT:
+                score += c.share * c.turnout * 1.0
+            elif c.lean == PartyID.REPUBLICAN:
+                score += c.share * c.turnout * -1.0
+        base = 0.5 + 0.12 * score + 0.5 * self._state_signal_dem(st) + self._national_signal_dem()
+        if incumbent == PartyID.DEMOCRAT:
+            base += 0.02
+        elif incumbent == PartyID.REPUBLICAN:
+            base -= 0.02
+        base += self.rng.uniform(-0.03, 0.03)
+        return max(0.05, min(0.95, base))
+
+    def _update_approvals_after_congress_results(self, prev_house: PartyID, prev_senate: PartyID) -> None:
+        # modest approval adjustments
+        if self.congress.house_control != prev_house:
+            if self.congress.house_control == self.president.party:
+                self.opinion.approval_president = max(0, min(100, self.opinion.approval_president + 1.0))
+                self.opinion.approval_congress = max(0, min(100, self.opinion.approval_congress + 0.5))
+            else:
+                self.opinion.approval_president = max(0, min(100, self.opinion.approval_president - 1.0))
+                self.opinion.approval_congress = max(0, min(100, self.opinion.approval_congress - 0.5))
+        if self.congress.senate_control != prev_senate:
+            if self.congress.senate_control == self.president.party:
+                self.opinion.approval_president = max(0, min(100, self.opinion.approval_president + 0.5))
+            else:
+                self.opinion.approval_president = max(0, min(100, self.opinion.approval_president - 0.5))
+
     # --- AI stubs ---
     def ai_consider_policy(self) -> Optional[Policy]:
         """Very simple AI: sometimes propose a popular or counter-cyclical policy."""
@@ -538,37 +670,62 @@ class UnitedStates:
 
     # --- elections ---
     def maybe_run_elections(self) -> None:
-        """Run elections on schedule: House every 2 years, President every 4 years, Senate/States staggered."""
+        """Run granular elections: House by districts (even years), Senate staggered (6-year classes), President every 4 years."""
         if self.month != 11:
             return
-        # Midterms/presidential years
         year = self.year
-        # House every 2 years
+        prev_house = self.congress.house_control
+        prev_senate = self.congress.senate_control
+
+        # Ensure structures
+        for st in self.states.values():
+            self._init_state_elections_if_missing(st)
+
+        # House elections (all seats) every 2 years
         if year % 2 == 0:
-            result_house = Election(level="federal", chamber=Chamber.HOUSE, office="House", year=year).run(self, self.rng)
-            self.congress.house_control = result_house.winner_party
-            self.log_event(f"House elections: {result_house.winner_party.value}")
-        # Senate coarse control swing
-        if year % 2 == 0 and self.rng.random() < 0.6:
-            result_senate = Election(level="federal", chamber=Chamber.SENATE, office="Senate", year=year).run(self, self.rng)
-            self.congress.senate_control = result_senate.winner_party
-            self.log_event(f"Senate elections: {result_senate.winner_party.value}")
+            dem_seats = 0
+            rep_seats = 0
+            for st in self.states.values():
+                for d in st.house_districts:
+                    p_dem = self._district_dem_probability(st, d)
+                    winner = PartyID.DEMOCRAT if self.rng.random() < p_dem else PartyID.REPUBLICAN
+                    d.incumbent = winner
+                    if winner == PartyID.DEMOCRAT:
+                        dem_seats += 1
+                    else:
+                        rep_seats += 1
+            self.congress.house_control = PartyID.DEMOCRAT if dem_seats >= rep_seats else PartyID.REPUBLICAN
+            self.log_event(f"House elections (granular): D {dem_seats} - R {rep_seats}")
+
+        # Senate: seats up based on class == year % 6
+        dem_total = 0
+        rep_total = 0
+        cycle = year % 6
+        for st in self.states.values():
+            for i in range(2):
+                inc = st.senate_seats[i]
+                if st.senate_classes[i] == cycle:
+                    p_dem = self._statewide_dem_probability(st, inc)
+                    winner = PartyID.DEMOCRAT if self.rng.random() < p_dem else PartyID.REPUBLICAN
+                    st.senate_seats[i] = winner
+            # count totals after possible updates
+            for seat in st.senate_seats:
+                if seat == PartyID.DEMOCRAT:
+                    dem_total += 1
+                elif seat == PartyID.REPUBLICAN:
+                    rep_total += 1
+        if dem_total or rep_total:
+            self.congress.senate_control = PartyID.DEMOCRAT if dem_total >= rep_total else PartyID.REPUBLICAN
+            self.log_event(f"Senate elections (staggered): D {dem_total} - R {rep_total}")
+
         # President every 4 years
         if year % 4 == 0:
             result_pres = Election(level="federal", office="President", year=year).run(self, self.rng)
             self.president.party = result_pres.winner_party
             self.log_event(f"Presidential election: {result_pres.winner_party.value}")
-        # Governors/legislatures random subset
-        for st in self.states.values():
-            if self.rng.random() < 0.33:
-                res_gov = Election(level=st.name, office="Governor", year=year).run(self, self.rng)
-                st.governor_party = res_gov.winner_party
-                self.log_event(f"{st.name} governor: {res_gov.winner_party.value}")
-            if self.rng.random() < 0.33:
-                res_leg = Election(level=st.name, chamber=Chamber.HOUSE, office="Legislature", year=year).run(self, self.rng)
-                st.legislature.house = res_leg.winner_party
-                st.legislature.senate = res_leg.winner_party
-                self.log_event(f"{st.name} legislature: {res_leg.winner_party.value}")
+
+        # Post-election approvals
+        self._update_approvals_after_congress_results(prev_house, prev_senate)
 
     # --- events ---
     def trigger_event(self) -> Optional[Event]:
@@ -680,6 +837,40 @@ class UnitedStates:
                 legislature=LegislatureControl(house=PartyID.DEMOCRAT, senate=PartyID.DEMOCRAT),
             ),
         }
+        # Initialize election structures for each state
+        tmp_us = {
+            "year": 2025,
+            "month": 1,
+        }
+        # Use a temporary UnitedStates-like object for init helper signature by ad-hoc call later
+        # Instead, we will just do a quick local init similar to helper to avoid complexity here.
+        for st in states.values():
+            if not st.voter_cohorts:
+                st.voter_cohorts = [
+                    VoterCohort(name="Urban Dem", share=0.42, lean=PartyID.DEMOCRAT, turnout=0.62),
+                    VoterCohort(name="Suburban Rep", share=0.40, lean=PartyID.REPUBLICAN, turnout=0.61),
+                    VoterCohort(name="Independent", share=0.18, lean=PartyID.INDEPENDENT, turnout=0.48),
+                ]
+            if not st.house_districts:
+                # Create 6 basic districts with minor swings
+                rnd = random.Random(seed + 1 if seed is not None else None)
+                for i in range(6):
+                    swing = rnd.uniform(-0.04, 0.04)
+                    bias = rnd.uniform(-0.03, 0.03)
+                    cohorts = []
+                    for c in st.voter_cohorts:
+                        delta = rnd.uniform(-0.05, 0.05)
+                        share = max(0.05, min(0.9, c.share + delta))
+                        cohorts.append(VoterCohort(name=c.name, share=share, lean=c.lean, turnout=c.turnout))
+                    total = sum(c.share for c in cohorts)
+                    for c in cohorts:
+                        c.share = c.share / total
+                    st.house_districts.append(District(id=f"{st.name}-{i+1}", cohorts=cohorts, turnout_bias=bias, swing=swing))
+            if not st.senate_seats or len(st.senate_seats) != 2:
+                st.senate_seats = [st.legislature.senate, st.legislature.senate]
+            if not st.senate_classes or len(st.senate_classes) != 2:
+                rnd2 = random.Random(seed + 2 if seed is not None else None)
+                st.senate_classes = [rnd2.randrange(0, 6), rnd2.randrange(0, 6)]
         budget = FederalBudget(revenue=4500.0, spending=5200.0)
         president = President(name="Incumbent", party=PartyID.DEMOCRAT)
         congress = Congress(house_control=PartyID.DEMOCRAT, senate_control=PartyID.DEMOCRAT)
