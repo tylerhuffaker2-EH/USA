@@ -1140,3 +1140,28 @@ class UnitedStates:
         )
         us.recent_events = list(data.get("recent_events", []))
         return us
+
+    # --- advance_turn method ---
+    def advance_turn(self) -> None:
+        """Advance the simulation by one month, handling elections, AI decisions, and events."""
+        # Increment time
+        self.month += 1
+        if self.month > 12:
+            self.month = 1
+            self.year += 1
+
+        # AI decisions for states
+        for state in self.states.values():
+            self.ai_state_turn(state)
+
+        # AI national strategy
+        self.ai_party_national_strategy()
+
+        # React to recent events
+        self.ai_react_to_events()
+
+        # Run elections if applicable
+        self.maybe_run_elections()
+
+        # Log the state
+        self.log_event("Turn advanced: AI decisions and elections processed.")
