@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from usa.models import UnitedStates, Policy, FederalBudget, PoliticalParty, PartyID, Congress, President, PublicOpinion
+from usa.models import UnitedStates, Policy, FederalBudget, PoliticalParty, PartyID, Congress, President, PublicOpinion, SupremeCourt, EventManager
 import random
 
 # Initialize the simulation
@@ -44,6 +44,14 @@ usa.president = mock_president
 mock_opinion = PublicOpinion(approval_president=50.0, approval_congress=30.0)
 usa.opinion = mock_opinion
 
+# Mock SupremeCourt object
+mock_court = SupremeCourt(lean=PartyID.DEMOCRAT)
+usa.court = mock_court
+
+# Mock EventManager object
+mock_event_manager = EventManager(rng)
+usa.event_manager = mock_event_manager
+
 # Simulate 12 months
 for _ in range(12):
     usa.advance_turn()
@@ -66,4 +74,18 @@ else:
 
 # Example: Log events
 for log_entry in usa.log:
+    print(log_entry)
+
+# Save the state to a file
+save_path = "simulation_state.json"
+usa.save_to_file(save_path)
+print(f"Simulation state saved to {save_path}")
+
+# Load the state from the file
+loaded_usa = UnitedStates.load_from_file(save_path)
+print("Simulation state loaded successfully.")
+
+# Verify loaded state by advancing a turn
+loaded_usa.advance_turn()
+for log_entry in loaded_usa.log[-3:]:
     print(log_entry)

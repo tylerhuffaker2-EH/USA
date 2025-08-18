@@ -1165,3 +1165,17 @@ class UnitedStates:
 
         # Log the state
         self.log_event("Turn advanced: AI decisions and elections processed.")
+
+    def save_to_file(self, file_path: str) -> None:
+        """Save the current state to a JSON file."""
+        import json
+        with open(file_path, 'w') as f:
+            json.dump(self.to_dict(), f, indent=4)
+
+    @classmethod
+    def load_from_file(cls, file_path: str) -> "UnitedStates":
+        """Load the state from a JSON file."""
+        import json
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+        return cls.from_dict(data)
