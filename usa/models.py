@@ -505,6 +505,7 @@ class UnitedStates:
     inflation: float = 2.5
 
     log: List[str] = field(default_factory=list)
+    recent_events: List[str] = field(default_factory=list)
 
     def log_event(self, msg: str) -> None:
         self.log.append(f"[{self.year}-{self.month:02d}] {msg}")
@@ -640,6 +641,134 @@ class UnitedStates:
                 )
         return None
 
+    # --- state policy process ---
+    def attempt_pass_state_policy(self, st: State, policy: Policy) -> bool:
+        """Simulate state-level policy passage and apply effects to that state.
+        Returns True if policy passes.
+        """
+        base_support = (policy.popularity - 50.0) / 120.0  # narrower range for states
+        align = 0.12 if policy.sponsor_party in (st.legislature.house, st.legislature.senate) else -0.06
+        gov_bonus = 0.08 if policy.sponsor_party == st.governor_party else 0.0
+        opinion_push = (st.approval_governor - 50.0) / 200.0
+        prob = 0.5 + base_support + align + gov_bonus + opinion_push
+        prob = max(0.05, min(0.95, prob))
+        if self.rng.random() < prob:
+            # Apply local effects
+            st.gdp *= (1.0 + policy.effect_growth)
+            st.unemployment = max(2.5, min(20.0, st.unemployment + policy.effect_unemployment))
+            st.inflation = max(0.0, min(20.0, st.inflation + policy.effect_inflation))
+            if policy.cost >= 0:
+                st.budget_spending += policy.cost
+            else:
+                st.budget_revenue += -policy.cost
+            # Local approval shifts
+            if policy.sponsor_party == st.governor_party:
+                st.approval_governor = max(0.0, min(100.0, st.approval_governor + 0.8))
+            st.approval_legislature = max(0.0, min(100.0, st.approval_legislature + 0.4))
+            # National issue awareness
+            self.opinion.update_issue(policy, self.rng.uniform(-2.0, 2.0))
+            self.log_event(f"{st.name} policy passed: {policy.title}")
+            return True
+        else:
+            self.log_event(f"{st.name} policy failed: {policy.title}")
+            return False
+
+    # --- AI: state-level decision this month ---
+    def ai_state_turn(self, st: State) -> None:
+        # Choose a policy theme based on state conditions
+        pol: Optional[Policy] = None
+        if st.unemployment > 6.5:
+            pol = Policy(
+                title="State Jobs Program",
+                description="Hire for public works and small biz grants",
+                cost=10.0,
+                effect_growth=0.003,
+                effect_unemployment=-0.2,
+                popularity=62.0,
+                sponsor_party=st.governor_party,
+            )
+        elif st.inflation > 5.0:
+            pol = Policy(
+                title="State Spending Freeze",
+                description="Temporary restraint on non-essential spending",
+                cost=-5.0,
+                effect_growth=-0.001,
+                effect_inflation=-0.2,
+                popularity=52.0,
+                sponsor_party=st.legislature.house,
+            )
+        elif st.budget_spending - st.budget_revenue > 5.0:
+            pol = Policy(
+                title="Budget Balance Act",
+                description="Raise fees and cut waste to close gap",
+                cost=-8.0,
+                effect_growth=-0.0005,
+                effect_unemployment=0.05,
+                popularity=49.0,
+                sponsor_party=st.legislature.senate,
+            )
+        else:
+            if self.rng.random() < 0.35:
+                pol = Policy(
+                    title="State Infrastructure",
+                    description="Fix roads and bridges",
+                    cost=12.0,
+                    effect_growth=0.002,
+                    effect_unemployment=-0.1,
+                    popularity=64.0,
+                    sponsor_party=st.governor_party,
+                )
+        if pol:
+            self.attempt_pass_state_policy(st, pol)
+
+        # Campaigning: gently adjust district swing/turnout
+        if self.rng.random() < 0.30:
+            party = st.governor_party
+            adj = 0.004 if party == PartyID.DEMOCRAT else -0.004
+            for d in st.house_districts:
+                d.swing = max(-0.2, min(0.2, d.swing + adj + self.rng.uniform(-0.002, 0.002)))
+                d.turnout_bias = max(-0.1, min(0.1, d.turnout_bias + self.rng.uniform(-0.002, 0.002)))
+            # small approval nudges
+            st.approval_governor = max(0, min(100, st.approval_governor + 0.2))
+            st.approval_legislature = max(0, min(100, st.approval_legislature + 0.1))
+
+    # --- AI: national party strategy placeholders ---
+    def ai_party_national_strategy(self) -> None:
+        """Placeholder: tweak party approvals based on macro context."""
+        deficit_ratio = (self.budget.spending - self.budget.revenue) / max(1.0, self.budget.revenue)
+        econ = self.growth - 0.2 * self.inflation - 0.3 * self.unemployment
+        # Dems gain on growth, Reps gain on inflation/deficit concerns (simplified heuristic)
+        self.parties[PartyID.DEMOCRAT].adjust_approval(0.2 * econ)
+        self.parties[PartyID.REPUBLICAN].adjust_approval(0.5 * (0.02 - econ) + 0.5 * deficit_ratio)
+
+    def ai_react_to_events(self) -> None:
+        """Placeholder reactions to very recent events: propose emergency actions or campaign messaging."""
+        if not self.recent_events:
+            return
+        recent = self.recent_events[-1]
+        if recent == "hurricane":
+            # Federal emergency package
+            pol = Policy(
+                title="Disaster Relief",
+                description="Emergency aid to impacted regions",
+                cost=50.0,
+                effect_growth=0.001,
+                effect_unemployment=-0.05,
+                popularity=70.0,
+                sponsor_party=self.president.party,
+            )
+            self.attempt_pass_policy(pol)
+            # Likely impacted states campaign and local measures (TX, FL if present)
+            for name in ("Texas", "Florida"):
+                st = self.states.get(name)
+                if st:
+                    self.ai_state_turn(st)
+        elif recent == "scandal":
+            # Opposing party campaigns nationally
+            opp = PartyID.REPUBLICAN if self.president.party == PartyID.DEMOCRAT else PartyID.DEMOCRAT
+            self.parties[opp].adjust_approval(1.0)
+        # Other events could be handled similarly
+
     # --- policy process ---
     def attempt_pass_policy(self, policy: Policy) -> bool:
         """Simulate legislative passage influenced by party control and popularity.
@@ -740,6 +869,10 @@ class UnitedStates:
         if ev.party_benefit and ev.party_benefit in self.parties:
             self.parties[ev.party_benefit].adjust_approval(1.0)
         self.log_event(f"Event: {ev.description}")
+        # Track recent events by key for AI
+        self.recent_events.append(ev.key)
+        if len(self.recent_events) > 12:
+            self.recent_events.pop(0)
         return ev
 
     # --- monthly/quarterly tick ---
@@ -766,10 +899,15 @@ class UnitedStates:
             pol = self.ai_consider_policy()
             if pol:
                 self.attempt_pass_policy(pol)
+            # State AIs propose and campaign
+            for st in self.states.values():
+                self.ai_state_turn(st)
 
             # events chance
             if self.rng.random() < 0.35:
                 self.trigger_event()
+                # Reactions to the most recent event
+                self.ai_react_to_events()
 
             # elections if applicable
             self.maybe_run_elections()
@@ -779,6 +917,10 @@ class UnitedStates:
             self.opinion.approval_congress += 0.05 * (40.0 - self.opinion.approval_congress)
             self.opinion.approval_president = max(0.0, min(100.0, self.opinion.approval_president))
             self.opinion.approval_congress = max(0.0, min(100.0, self.opinion.approval_congress))
+
+            # national party strategic drift
+            if self.rng.random() < 0.5:
+                self.ai_party_national_strategy()
 
             # federal revenue tracks national GDP via tax_rate
             total_gdp = sum(st.gdp for st in self.states.values())
@@ -965,6 +1107,7 @@ class UnitedStates:
             "events": self.event_manager.to_dict(),
             "rng_state": _listify(self.rng.getstate()),
             "log": list(self.log),
+            "recent_events": list(self.recent_events),
         }
 
     @classmethod
@@ -995,4 +1138,5 @@ class UnitedStates:
             inflation=float(data["macro"]["inflation"]),  # type: ignore[index]
             log=list(data.get("log", [])),
         )
+        us.recent_events = list(data.get("recent_events", []))
         return us
