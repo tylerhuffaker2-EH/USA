@@ -1,0 +1,168 @@
+{
+  "events": [
+    {
+      "key": "hurricane",
+      "name": "Major Hurricane",
+      "description": "Major hurricane hits Gulf Coast",
+      "weight": 1.0,
+      "triggers": {
+        "random_probability": 0.15,
+        "conditions": {
+          "month_range": [6, 11],
+          "affected_states": ["Texas", "Florida"]
+        }
+      },
+      "effects": {
+        "national": {
+          "impact_growth": -0.003,
+          "impact_unemployment": 0.2,
+          "impact_inflation": 0.1
+        },
+        "states": {
+          "Texas": {
+            "impact_gdp": -0.01,
+            "impact_unemployment": 0.5
+          },
+          "Florida": {
+            "impact_gdp": -0.01,
+            "impact_unemployment": 0.5
+          }
+        }
+      },
+      "consequences": [
+        {
+          "type": "policy_proposal",
+          "policy_key": "disaster_relief",
+          "sponsor": "president",
+          "probability": 0.8
+        },
+        {
+          "type": "chain_event",
+          "event_key": "media_attention_disaster",
+          "delay_months": 1,
+          "probability": 0.6
+        }
+      ]
+    },
+    {
+      "key": "tech_boom",
+      "name": "Technology Boom",
+      "description": "Tech productivity boom drives economic growth",
+      "weight": 0.6,
+      "triggers": {
+        "random_probability": 0.1,
+        "conditions": {
+          "min_growth": 0.01
+        }
+      },
+      "effects": {
+        "national": {
+          "impact_growth": 0.004,
+          "impact_unemployment": -0.15,
+          "impact_inflation": 0.0
+        },
+        "states": {
+          "California": {
+            "impact_gdp": 0.02,
+            "impact_unemployment": -0.3
+          }
+        }
+      },
+      "consequences": [
+        {
+          "type": "party_approval",
+          "party": "president_party",
+          "adjustment": 1.5
+        }
+      ]
+    },
+    {
+      "key": "scandal",
+      "name": "Political Scandal",
+      "description": "Major political scandal rocks Washington",
+      "weight": 0.8,
+      "triggers": {
+        "random_probability": 0.05,
+        "conditions": {
+          "min_approval_president": 40
+        }
+      },
+      "effects": {
+        "national": {
+          "impact_approval_president": -2.5,
+          "impact_approval_congress": -1.0
+        }
+      },
+      "consequences": [
+        {
+          "type": "party_approval",
+          "party": "opposition_party",
+          "adjustment": 2.0
+        },
+        {
+          "type": "chain_event",
+          "event_key": "investigation_launched",
+          "delay_months": 2,
+          "probability": 0.7
+        }
+      ]
+    },
+    {
+      "key": "media_attention_disaster",
+      "name": "Media Focus on Disaster Response",
+      "description": "Media scrutinizes government disaster response",
+      "weight": 0.0,
+      "effects": {
+        "national": {
+          "impact_approval_president": -0.5
+        }
+      },
+      "consequences": [
+        {
+          "type": "policy_proposal",
+          "policy_key": "emergency_preparedness",
+          "sponsor": "opposition_party",
+          "probability": 0.6
+        }
+      ]
+    },
+    {
+      "key": "investigation_launched",
+      "name": "Congressional Investigation",
+      "description": "Congress launches investigation into scandal",
+      "weight": 0.0,
+      "effects": {
+        "national": {
+          "impact_approval_president": -1.0,
+          "impact_approval_congress": 0.5
+        }
+      }
+    },
+    {
+      "key": "bipartisan_breakthrough",
+      "name": "Bipartisan Breakthrough",
+      "description": "Rare bipartisan cooperation on major issue",
+      "weight": 0.4,
+      "triggers": {
+        "random_probability": 0.08,
+        "conditions": {
+          "divided_government": true
+        }
+      },
+      "effects": {
+        "national": {
+          "impact_approval_congress": 2.0,
+          "impact_approval_president": 1.0
+        }
+      },
+      "consequences": [
+        {
+          "type": "policy_proposal",
+          "policy_key": "infrastructure_bipartisan",
+          "sponsor": "congress_majority",
+          "probability": 0.9
+        }
+      ]
+    }
+  ]
+}

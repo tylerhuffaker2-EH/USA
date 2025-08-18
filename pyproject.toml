@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Turn-based political simulation of the United States (backend prototype)"
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [{ name = "", email = "" }]
+authors = [{ name = "Tyler Huffaker", email = "" }]
 requires-python = ">=3.10"
 
 [tool.setuptools.packages.find]

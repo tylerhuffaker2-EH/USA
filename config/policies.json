@@ -1,0 +1,168 @@
+{
+  "policies": [
+    {
+      "key": "disaster_relief",
+      "title": "Disaster Relief Package",
+      "description": "Emergency aid to disaster-impacted regions",
+      "cost": 50.0,
+      "effects": {
+        "national": {
+          "effect_growth": 0.001,
+          "effect_unemployment": -0.05
+        }
+      },
+      "popularity": 70.0,
+      "requirements": {
+        "min_approval_president": 30
+      }
+    },
+    {
+      "key": "stimulus",
+      "title": "Economic Stimulus Package",
+      "description": "Counter-cyclical fiscal stimulus to boost economy",
+      "cost": 300.0,
+      "effects": {
+        "national": {
+          "effect_growth": 0.01,
+          "effect_unemployment": -0.3
+        }
+      },
+      "popularity": 60.0,
+      "requirements": {
+        "max_growth": 0.0,
+        "legislative_control": ["house", "senate"]
+      }
+    },
+    {
+      "key": "austerity",
+      "title": "Fiscal Restraint Act",
+      "description": "Spending restraint to curb inflation",
+      "cost": -100.0,
+      "effects": {
+        "national": {
+          "effect_growth": -0.005,
+          "effect_inflation": -0.8
+        }
+      },
+      "popularity": 45.0,
+      "requirements": {
+        "min_inflation": 4.0
+      }
+    },
+    {
+      "key": "infrastructure",
+      "title": "Infrastructure Investment Act",
+      "description": "Major investment in roads, bridges, and broadband",
+      "cost": 200.0,
+      "effects": {
+        "national": {
+          "effect_growth": 0.005,
+          "effect_unemployment": -0.2
+        }
+      },
+      "popularity": 65.0
+    },
+    {
+      "key": "infrastructure_bipartisan",
+      "title": "Bipartisan Infrastructure Deal",
+      "description": "Cross-party agreement on infrastructure spending",
+      "cost": 150.0,
+      "effects": {
+        "national": {
+          "effect_growth": 0.004,
+          "effect_unemployment": -0.15
+        }
+      },
+      "popularity": 75.0,
+      "consequences": [
+        {
+          "type": "approval_boost",
+          "target": "president",
+          "adjustment": 2.0
+        },
+        {
+          "type": "approval_boost",
+          "target": "congress",
+          "adjustment": 1.5
+        }
+      ]
+    },
+    {
+      "key": "emergency_preparedness",
+      "title": "Emergency Preparedness Reform",
+      "description": "Improve disaster response and preparedness",
+      "cost": 25.0,
+      "effects": {
+        "national": {
+          "effect_growth": 0.001
+        }
+      },
+      "popularity": 68.0
+    },
+    {
+      "key": "state_jobs_program",
+      "title": "State Jobs Program",
+      "description": "Public works and small business grants",
+      "cost": 10.0,
+      "effects": {
+        "state": {
+          "effect_growth": 0.003,
+          "effect_unemployment": -0.2
+        }
+      },
+      "popularity": 62.0,
+      "level": "state",
+      "requirements": {
+        "min_unemployment": 6.5
+      }
+    },
+    {
+      "key": "state_spending_freeze",
+      "title": "State Spending Freeze",
+      "description": "Temporary restraint on non-essential spending",
+      "cost": -5.0,
+      "effects": {
+        "state": {
+          "effect_growth": -0.001,
+          "effect_inflation": -0.2
+        }
+      },
+      "popularity": 52.0,
+      "level": "state",
+      "requirements": {
+        "min_inflation": 5.0
+      }
+    },
+    {
+      "key": "state_budget_balance",
+      "title": "State Budget Balance Act",
+      "description": "Raise fees and cut waste to close budget gap",
+      "cost": -8.0,
+      "effects": {
+        "state": {
+          "effect_growth": -0.0005,
+          "effect_unemployment": 0.05
+        }
+      },
+      "popularity": 49.0,
+      "level": "state",
+      "requirements": {
+        "min_deficit": 5.0
+      }
+    },
+    {
+      "key": "state_infrastructure",
+      "title": "State Infrastructure Investment",
+      "description": "Fix roads, bridges, and local infrastructure",
+      "cost": 12.0,
+      "effects": {
+        "state": {
+          "effect_growth": 0.002,
+          "effect_unemployment": -0.1
+        }
+      },
+      "popularity": 64.0,
+      "level": "state"
+    }
+  ]
+}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import random
 import copy
 
@@ -417,10 +417,18 @@ class Event:
     impact_unemployment: float = 0.0
     impact_inflation: float = 0.0
     party_benefit: Optional[PartyID] = None
+    name: str = ""
+    consequences: List[Dict[str, Any]] = field(default_factory=list)
+    state_effects: Dict[str, Dict[str, float]] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not self.name:
+            self.name = self.key.replace("_", " ").title()
 
     def to_dict(self) -> Dict[str, object]:
         return {
             "key": self.key,
+            "name": self.name,
             "description": self.description,
             "impact_approval_president": self.impact_approval_president,
             "impact_approval_congress": self.impact_approval_congress,
@@ -428,6 +436,8 @@ class Event:
             "impact_unemployment": self.impact_unemployment,
             "impact_inflation": self.impact_inflation,
             "party_benefit": self.party_benefit.value if self.party_benefit else None,
+            "consequences": list(self.consequences),
+            "state_effects": copy.deepcopy(self.state_effects),
         }
 
     @classmethod
@@ -435,6 +445,7 @@ class Event:
         pb = data.get("party_benefit")
         return cls(
             key=str(data["key"]),
+            name=str(data.get("name", "")),
             description=str(data["description"]),
             impact_approval_president=float(data.get("impact_approval_president", 0.0)),
             impact_approval_congress=float(data.get("impact_approval_congress", 0.0)),
@@ -442,38 +453,243 @@ class Event:
             impact_unemployment=float(data.get("impact_unemployment", 0.0)),
             impact_inflation=float(data.get("impact_inflation", 0.0)),
             party_benefit=PartyID(pb) if pb else None,
+            consequences=list(data.get("consequences", [])),
+            state_effects=dict(data.get("state_effects", {})),
         )
 
 
 class EventManager:
-    """Random and triggered events with simple weighted selection."""
+    """Enhanced event manager with configurable triggers, chains, and consequences."""
 
     def __init__(self, rng: random.Random):
         self.rng = rng
         self.catalog: Dict[str, Tuple[Event, float]] = {}
+        self.pending_events: List[Tuple[str, int]] = []  # (event_key, delay_months)
+        
+        # Load configuration
+        try:
+            from .config import ConfigLoader
+            self.config_loader = ConfigLoader()
+            self._load_events_from_config()
+        except ImportError:
+            self.config_loader = None
+
+    def _load_events_from_config(self) -> None:
+        """Load events from configuration files."""
+        if not self.config_loader:
+            return
+            
+        for event_config in self.config_loader.get_all_events():
+            # Convert EventConfig to Event
+            event = Event(
+                key=event_config.key,
+                name=event_config.name,
+                description=event_config.description,
+                consequences=event_config.consequences
+            )
+            
+            # Apply national effects
+            national_effects = event_config.effects.get("national", {})
+            event.impact_approval_president = national_effects.get("impact_approval_president", 0.0)
+            event.impact_approval_congress = national_effects.get("impact_approval_congress", 0.0)
+            event.impact_growth = national_effects.get("impact_growth", 0.0)
+            event.impact_unemployment = national_effects.get("impact_unemployment", 0.0)
+            event.impact_inflation = national_effects.get("impact_inflation", 0.0)
+            
+            # Store state effects
+            event.state_effects = event_config.effects.get("states", {})
+            
+            self.register(event, event_config.weight)
 
     def register(self, event: Event, weight: float = 1.0) -> None:
         self.catalog[event.key] = (event, weight)
 
-    def random_event(self) -> Optional[Event]:
+    def check_event_conditions(self, event_config, us: "UnitedStates") -> bool:
+        """Check if an event's trigger conditions are met."""
+        if not self.config_loader:
+            return True
+            
+        triggers = event_config.triggers
+        conditions = triggers.get("conditions", {})
+        
+        # Check month range
+        if "month_range" in conditions:
+            start, end = conditions["month_range"]
+            if not (start <= us.month <= end):
+                return False
+        
+        # Check minimum growth
+        if "min_growth" in conditions:
+            if us.growth < conditions["min_growth"]:
+                return False
+        
+        # Check minimum approval
+        if "min_approval_president" in conditions:
+            if us.opinion.approval_president < conditions["min_approval_president"]:
+                return False
+        
+        # Check for divided government
+        if conditions.get("divided_government"):
+            divided = (us.president.party != us.congress.house_control or 
+                      us.president.party != us.congress.senate_control)
+            if not divided:
+                return False
+        
+        # Check inflation
+        if "min_inflation" in conditions:
+            if us.inflation < conditions["min_inflation"]:
+                return False
+        
+        return True
+
+    def random_event(self, us: "UnitedStates" = None) -> Optional[Event]:
+        """Select a random event, considering triggers and conditions."""
         if not self.catalog:
             return None
-        events = list(self.catalog.values())
-        total_w = sum(w for _, w in events)
+        
+        # Process pending chained events first
+        if self.pending_events:
+            ready_events = [(key, delay) for key, delay in self.pending_events if delay <= 0]
+            if ready_events:
+                event_key, _ = ready_events[0]
+                self.pending_events = [(k, d-1) for k, d in self.pending_events if not (k == event_key and d <= 0)]
+                event, _ = self.catalog.get(event_key, (None, 0))
+                if event:
+                    return event
+        
+        # Decrement delays for pending events
+        self.pending_events = [(k, d-1) for k, d in self.pending_events]
+        
+        # Filter events based on conditions if US state is provided
+        eligible_events = []
+        
+        if us and self.config_loader:
+            for event_key, (event, weight) in self.catalog.items():
+                event_config = self.config_loader.get_event(event_key)
+                if event_config and event_config.triggers.get("random_probability", 0) > 0:
+                    # Check random trigger probability
+                    if self.rng.random() < event_config.triggers["random_probability"]:
+                        # Check conditions
+                        if self.check_event_conditions(event_config, us):
+                            eligible_events.append((event, weight))
+                else:
+                    # Legacy events without config
+                    eligible_events.append((event, weight))
+        else:
+            # Fallback to all events
+            eligible_events = list(self.catalog.values())
+        
+        if not eligible_events:
+            return None
+        
+        # Weighted random selection
+        total_w = sum(w for _, w in eligible_events)
+        if total_w <= 0:
+            return None
+            
         pick = self.rng.uniform(0, total_w)
         acc = 0.0
-        for ev, w in events:
+        for event, w in eligible_events:
             acc += w
             if pick <= acc:
-                return ev
-        return events[-1][0]
+                return event
+        return eligible_events[-1][0]
+
+    def process_event_consequences(self, event: Event, us: "UnitedStates") -> None:
+        """Process the consequences of an event."""
+        for consequence in event.consequences:
+            consequence_type = consequence.get("type")
+            
+            if consequence_type == "policy_proposal":
+                self._handle_policy_proposal(consequence, us)
+            elif consequence_type == "chain_event":
+                self._handle_chain_event(consequence)
+            elif consequence_type == "party_approval":
+                self._handle_party_approval(consequence, us)
+            elif consequence_type == "approval_boost":
+                self._handle_approval_boost(consequence, us)
+
+    def _handle_policy_proposal(self, consequence: Dict[str, Any], us: "UnitedStates") -> None:
+        """Handle policy proposal consequence."""
+        if self.rng.random() < consequence.get("probability", 1.0):
+            policy_key = consequence.get("policy_key")
+            if self.config_loader:
+                policy_config = self.config_loader.get_policy(policy_key)
+                if policy_config:
+                    # Create policy from config and propose it
+                    policy = self._create_policy_from_config(policy_config, us)
+                    if policy:
+                        if policy_config.level == "state":
+                            # Propose to affected states
+                            for state in us.states.values():
+                                us.attempt_pass_state_policy(state, policy)
+                        else:
+                            us.attempt_pass_policy(policy)
+
+    def _handle_chain_event(self, consequence: Dict[str, Any]) -> None:
+        """Handle chained event consequence."""
+        if self.rng.random() < consequence.get("probability", 1.0):
+            event_key = consequence.get("event_key")
+            delay = consequence.get("delay_months", 0)
+            self.pending_events.append((event_key, delay))
+
+    def _handle_party_approval(self, consequence: Dict[str, Any], us: "UnitedStates") -> None:
+        """Handle party approval adjustment."""
+        party_type = consequence.get("party")
+        adjustment = consequence.get("adjustment", 0.0)
+        
+        if party_type == "president_party":
+            us.parties[us.president.party].adjust_approval(adjustment)
+        elif party_type == "opposition_party":
+            opp = PartyID.REPUBLICAN if us.president.party == PartyID.DEMOCRAT else PartyID.DEMOCRAT
+            us.parties[opp].adjust_approval(adjustment)
+
+    def _handle_approval_boost(self, consequence: Dict[str, Any], us: "UnitedStates") -> None:
+        """Handle approval boost consequence."""
+        target = consequence.get("target")
+        adjustment = consequence.get("adjustment", 0.0)
+        
+        if target == "president":
+            us.opinion.approval_president = max(0, min(100, us.opinion.approval_president + adjustment))
+        elif target == "congress":
+            us.opinion.approval_congress = max(0, min(100, us.opinion.approval_congress + adjustment))
+
+    def _create_policy_from_config(self, policy_config, us: "UnitedStates") -> Optional["Policy"]:
+        """Create a Policy object from configuration."""
+        # Check requirements
+        reqs = policy_config.requirements
+        
+        if "min_approval_president" in reqs and us.opinion.approval_president < reqs["min_approval_president"]:
+            return None
+        if "max_growth" in reqs and us.growth > reqs["max_growth"]:
+            return None
+        if "min_inflation" in reqs and us.inflation < reqs["min_inflation"]:
+            return None
+        
+        # Determine sponsor
+        sponsor = us.president.party  # default
+        
+        # Create policy
+        effects = policy_config.effects.get("national", {}) if policy_config.level == "federal" else policy_config.effects.get("state", {})
+        
+        return Policy(
+            title=policy_config.title,
+            description=policy_config.description,
+            cost=policy_config.cost,
+            effect_growth=effects.get("effect_growth", 0.0),
+            effect_unemployment=effects.get("effect_unemployment", 0.0),
+            effect_inflation=effects.get("effect_inflation", 0.0),
+            popularity=policy_config.popularity,
+            sponsor_party=sponsor
+        )
 
     def to_dict(self) -> Dict[str, object]:
         return {
             "catalog": [
                 {"event": ev.to_dict(), "weight": w}
                 for (ev, w) in self.catalog.values()
-            ]
+            ],
+            "pending_events": list(self.pending_events)
         }
 
     @classmethod
@@ -483,6 +699,7 @@ class EventManager:
             ev = Event.from_dict(item["event"])
             w = float(item.get("weight", 1.0))
             em.register(ev, w)
+        em.pending_events = list(data.get("pending_events", []))
         return em
 
 
@@ -631,9 +848,30 @@ class UnitedStates:
 
     # --- AI stubs ---
     def ai_consider_policy(self) -> Optional[Policy]:
-        """Very simple AI: sometimes propose a popular or counter-cyclical policy."""
+        """Enhanced AI policy consideration using configuration system."""
         if self.rng.random() < 0.6:
-            # economic tweak policy
+            # Try to load policies from config first
+            try:
+                from .config import ConfigLoader
+                config_loader = ConfigLoader()
+                federal_policies = config_loader.get_policies_by_level("federal")
+                
+                # Filter policies based on current conditions
+                eligible_policies = []
+                for policy_config in federal_policies:
+                    if self._check_policy_requirements(policy_config):
+                        eligible_policies.append(policy_config)
+                
+                if eligible_policies:
+                    # Select based on current needs
+                    selected = self._select_best_policy(eligible_policies)
+                    if selected:
+                        return self._create_policy_from_config(selected)
+                        
+            except ImportError:
+                pass  # Fall back to hardcoded policies
+            
+            # Fallback to original hardcoded logic
             if self.growth < 0.0:
                 return Policy(
                     title="Stimulus",
@@ -665,6 +903,67 @@ class UnitedStates:
                     sponsor_party=self.president.party,
                 )
         return None
+
+    def _check_policy_requirements(self, policy_config) -> bool:
+        """Check if policy requirements are met."""
+        reqs = policy_config.requirements
+        
+        if "min_approval_president" in reqs and self.opinion.approval_president < reqs["min_approval_president"]:
+            return False
+        if "max_growth" in reqs and self.growth > reqs["max_growth"]:
+            return False
+        if "min_inflation" in reqs and self.inflation < reqs["min_inflation"]:
+            return False
+        if "legislative_control" in reqs:
+            required_control = reqs["legislative_control"]
+            if "house" in required_control and self.congress.house_control != self.president.party:
+                return False
+            if "senate" in required_control and self.congress.senate_control != self.president.party:
+                return False
+        
+        return True
+
+    def _select_best_policy(self, eligible_policies) -> Optional[Any]:
+        """Select the best policy based on current conditions."""
+        # Prioritize based on economic conditions
+        if self.growth < 0.0:
+            # Look for stimulus policies
+            for policy in eligible_policies:
+                if "stimulus" in policy.key.lower():
+                    return policy
+        
+        if self.inflation > 4.0:
+            # Look for anti-inflation policies
+            for policy in eligible_policies:
+                if "austerity" in policy.key.lower() or "restraint" in policy.key.lower():
+                    return policy
+        
+        if self.unemployment > 7.0:
+            # Look for job creation policies
+            for policy in eligible_policies:
+                if any(word in policy.key.lower() for word in ["jobs", "infrastructure", "stimulus"]):
+                    return policy
+        
+        # Default to most popular policy
+        if eligible_policies:
+            return max(eligible_policies, key=lambda p: p.popularity)
+        
+        return None
+
+    def _create_policy_from_config(self, policy_config) -> Policy:
+        """Create a Policy object from configuration."""
+        effects = policy_config.effects.get("national", {})
+        
+        return Policy(
+            title=policy_config.title,
+            description=policy_config.description,
+            cost=policy_config.cost,
+            effect_growth=effects.get("effect_growth", 0.0),
+            effect_unemployment=effects.get("effect_unemployment", 0.0),
+            effect_inflation=effects.get("effect_inflation", 0.0),
+            popularity=policy_config.popularity,
+            sponsor_party=self.president.party
+        )
 
     # --- state policy process ---
     def attempt_pass_state_policy(self, st: State, policy: Policy) -> bool:
@@ -700,54 +999,82 @@ class UnitedStates:
 
     # --- AI: state-level decision this month ---
     def ai_state_turn(self, st: State) -> None:
-        # Choose a policy theme based on state conditions
+        """State AI proposes policies and campaigns based on conditions."""
+        # Policy proposal logic with configuration support
         pol: Optional[Policy] = None
-        if st.unemployment > 6.5:
-            pol = Policy(
-                title="State Jobs Program",
-                description="Hire for public works and small biz grants",
-                cost=10.0,
-                effect_growth=0.003,
-                effect_unemployment=-0.2,
-                popularity=62.0,
-                sponsor_party=st.governor_party,
-            )
-        elif st.inflation > 5.0:
-            pol = Policy(
-                title="State Spending Freeze",
-                description="Temporary restraint on non-essential spending",
-                cost=-5.0,
-                effect_growth=-0.001,
-                effect_inflation=-0.2,
-                popularity=52.0,
-                sponsor_party=st.legislature.house,
-            )
-        elif st.budget_spending - st.budget_revenue > 5.0:
-            pol = Policy(
-                title="Budget Balance Act",
-                description="Raise fees and cut waste to close gap",
-                cost=-8.0,
-                effect_growth=-0.0005,
-                effect_unemployment=0.05,
-                popularity=49.0,
-                sponsor_party=st.legislature.senate,
-            )
-        else:
-            if self.rng.random() < 0.35:
+        
+        try:
+            from .config import ConfigLoader
+            config_loader = ConfigLoader()
+            state_policies = config_loader.get_policies_by_level("state")
+            
+            # Filter policies based on state conditions
+            eligible_policies = []
+            for policy_config in state_policies:
+                if self._check_state_policy_requirements(policy_config, st):
+                    eligible_policies.append(policy_config)
+            
+            if eligible_policies:
+                # Select best policy for current state conditions
+                selected = self._select_best_state_policy(eligible_policies, st)
+                if selected:
+                    pol = self._create_state_policy_from_config(selected, st)
+                    
+        except ImportError:
+            pass  # Fall back to hardcoded policies
+        
+        # Fallback to hardcoded logic if no config policy found
+        if not pol:
+            if st.unemployment > 6.5:
                 pol = Policy(
-                    title="State Infrastructure",
-                    description="Fix roads and bridges",
-                    cost=12.0,
-                    effect_growth=0.002,
-                    effect_unemployment=-0.1,
-                    popularity=64.0,
+                    title="State Jobs Program",
+                    description="Hire for public works and small biz grants",
+                    cost=10.0,
+                    effect_growth=0.003,
+                    effect_unemployment=-0.2,
+                    popularity=62.0,
                     sponsor_party=st.governor_party,
                 )
+            elif st.inflation > 5.0:
+                pol = Policy(
+                    title="State Spending Freeze",
+                    description="Temporary restraint on non-essential spending",
+                    cost=-5.0,
+                    effect_growth=-0.001,
+                    effect_inflation=-0.2,
+                    popularity=52.0,
+                    sponsor_party=st.legislature.house,
+                )
+            elif st.budget_spending - st.budget_revenue > 5.0:
+                pol = Policy(
+                    title="Budget Balance Act",
+                    description="Raise fees and cut waste to close gap",
+                    cost=-8.0,
+                    effect_growth=-0.0005,
+                    effect_unemployment=0.05,
+                    popularity=49.0,
+                    sponsor_party=st.legislature.senate,
+                )
+            else:
+                # If no crisis, consider a popular infrastructure bill
+                if self.rng.random() < 0.35:
+                    pol = Policy(
+                        title="State Infrastructure",
+                        description="Fix roads and bridges",
+                        cost=12.0,
+                        effect_growth=0.002,
+                        effect_unemployment=-0.1,
+                        popularity=64.0,
+                        sponsor_party=st.governor_party,
+                    )
+        
         if pol:
             self.attempt_pass_state_policy(st, pol)
 
-        # Campaigning: gently adjust district swing/turnout
-        if self.rng.random() < 0.30:
+        # Campaigning logic: more intense during election years
+        is_election_year = self.year % 2 == 0
+        campaign_intensity = 0.5 if is_election_year else 0.2
+        if self.rng.random() < campaign_intensity:
             party = st.governor_party
             adj = 0.004 if party == PartyID.DEMOCRAT else -0.004
             for d in st.house_districts:
@@ -757,9 +1084,61 @@ class UnitedStates:
             st.approval_governor = max(0, min(100, st.approval_governor + 0.2))
             st.approval_legislature = max(0, min(100, st.approval_legislature + 0.1))
 
+    def _check_state_policy_requirements(self, policy_config, st: State) -> bool:
+        """Check if state policy requirements are met."""
+        reqs = policy_config.requirements
+        
+        if "min_unemployment" in reqs and st.unemployment < reqs["min_unemployment"]:
+            return False
+        if "min_inflation" in reqs and st.inflation < reqs["min_inflation"]:
+            return False
+        if "min_deficit" in reqs and (st.budget_spending - st.budget_revenue) < reqs["min_deficit"]:
+            return False
+        
+        return True
+
+    def _select_best_state_policy(self, eligible_policies, st: State) -> Optional[Any]:
+        """Select the best state policy based on current conditions."""
+        # Prioritize based on state conditions
+        if st.unemployment > 6.5:
+            for policy in eligible_policies:
+                if "jobs" in policy.key.lower():
+                    return policy
+        
+        if st.inflation > 5.0:
+            for policy in eligible_policies:
+                if "freeze" in policy.key.lower():
+                    return policy
+        
+        if st.budget_spending - st.budget_revenue > 5.0:
+            for policy in eligible_policies:
+                if "balance" in policy.key.lower():
+                    return policy
+        
+        # Default to most popular policy
+        if eligible_policies:
+            return max(eligible_policies, key=lambda p: p.popularity)
+        
+        return None
+
+    def _create_state_policy_from_config(self, policy_config, st: State) -> Policy:
+        """Create a state Policy object from configuration."""
+        effects = policy_config.effects.get("state", {})
+        
+        return Policy(
+            title=policy_config.title,
+            description=policy_config.description,
+            cost=policy_config.cost,
+            effect_growth=effects.get("effect_growth", 0.0),
+            effect_unemployment=effects.get("effect_unemployment", 0.0),
+            effect_inflation=effects.get("effect_inflation", 0.0),
+            popularity=policy_config.popularity,
+            sponsor_party=st.governor_party
+        )
+
     # --- AI: national party strategy placeholders ---
     def ai_party_national_strategy(self) -> None:
-        """Placeholder: tweak party approvals based on macro context."""
+        """Tweak party approvals and focus based on macro context."""
         deficit_ratio = (self.budget.spending - self.budget.revenue) / max(1.0, self.budget.revenue)
         econ = self.growth - 0.2 * self.inflation - 0.3 * self.unemployment
         # Dems gain on growth, Reps gain on inflation/deficit concerns (simplified heuristic)
@@ -767,7 +1146,7 @@ class UnitedStates:
         self.parties[PartyID.REPUBLICAN].adjust_approval(0.5 * (0.02 - econ) + 0.5 * deficit_ratio)
 
     def ai_react_to_events(self) -> None:
-        """Placeholder reactions to very recent events: propose emergency actions or campaign messaging."""
+        """Propose actions or campaign messages in response to recent events."""
         if not self.recent_events:
             return
         recent = self.recent_events[-1]
@@ -789,10 +1168,12 @@ class UnitedStates:
                 if st:
                     self.ai_state_turn(st)
         elif recent == "scandal":
-            # Opposing party campaigns nationally
+            # Opposing party campaigns nationally on the scandal
             opp = PartyID.REPUBLICAN if self.president.party == PartyID.DEMOCRAT else PartyID.DEMOCRAT
-            self.parties[opp].adjust_approval(1.0)
+            self.parties[opp].adjust_approval(1.5)  # Stronger impact
+            self.log_event(f"{opp.value}s capitalize on presidential scandal.")
         # Other events could be handled similarly
+        self.recent_events.clear() # Events are handled, clear the queue
 
     # --- policy process ---
     def attempt_pass_policy(self, policy: Policy) -> bool:
@@ -887,17 +1268,35 @@ class UnitedStates:
 
     # --- events ---
     def trigger_event(self) -> Optional[Event]:
-        ev = self.event_manager.random_event()
+        ev = self.event_manager.random_event(self)  # Pass self to enable condition checking
         if not ev:
             return None
+        
+        # Apply national effects
         self.growth += ev.impact_growth
         self.unemployment = max(2.5, min(20.0, self.unemployment + ev.impact_unemployment))
         self.inflation = max(0.0, min(20.0, self.inflation + ev.impact_inflation))
         self.opinion.approval_president = max(0.0, min(100.0, self.opinion.approval_president + ev.impact_approval_president))
         self.opinion.approval_congress = max(0.0, min(100.0, self.opinion.approval_congress + ev.impact_approval_congress))
+        
+        # Apply state-specific effects
+        for state_name, effects in ev.state_effects.items():
+            state = self.states.get(state_name)
+            if state:
+                if "impact_gdp" in effects:
+                    state.gdp *= (1.0 + effects["impact_gdp"])
+                if "impact_unemployment" in effects:
+                    state.unemployment = max(2.5, min(20.0, state.unemployment + effects["impact_unemployment"]))
+        
+        # Handle party benefit
         if ev.party_benefit and ev.party_benefit in self.parties:
             self.parties[ev.party_benefit].adjust_approval(1.0)
+        
         self.log_event(f"Event: {ev.description}")
+        
+        # Process consequences
+        self.event_manager.process_event_consequences(ev, self)
+        
         # Track recent events by key for AI
         self.recent_events.append(ev.key)
         if len(self.recent_events) > 12:
