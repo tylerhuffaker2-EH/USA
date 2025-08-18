@@ -10,7 +10,25 @@ readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Tyler Huffaker", email = "" }]
 requires-python = ">=3.10"
+optional-dependencies = { dev = [ "pytest>=7.0.0", "mypy>=0.981", "ruff>=0.0.260", "flake8>=5.0.0" ] }
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["usa", "examples"]
+
+[tool.ruff]
+# Use Ruff for fast linting
+line-length = 88
+select = ["E", "F", "I", "B", "Q"]
+
+[tool.flake8]
+# Flake8 configuration
+max-line-length = 88
+extend-ignore = ["E203", "W503"]
+
+[tool.mypy]
+# Mypy type checking
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+warn_unused_configs = true
