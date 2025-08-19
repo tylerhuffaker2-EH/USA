@@ -17,6 +17,34 @@ Run the simulation demo (includes save/load):
 python examples/simulation_demo.py
 ```
 
+### Run the interactive Pygame menu
+
+You can launch a minimal UI to run the simulation, save/load, and trigger events:
+
+```powershell
+python main_menu.py
+```
+
+Or use the provided Windows launcher:
+
+```powershell
+./run_menu.bat
+```
+
+Menu navigation:
+
+- Up/Down arrows or mouse hover to select
+- Enter or left-click to confirm
+
+In-game controls:
+
+- SPACE: Advance 1 month
+- A: Advance 12 months
+- E: Trigger an event (with AI reaction)
+- S: Save to simulation_state.json
+- L: Load from simulation_state.json
+- ESC: Return to the main menu
+
 ## Recent Updates
 
 - Added save/load functionality for the simulation state.
@@ -25,5 +53,5 @@ python examples/simulation_demo.py
 - Created a sample script demonstrating election simulation, policy passing, and AI decision-making.
 
 ## Notes
-- This is a backend prototype; no UI yet.
+- Minimal Pygame UI is included for previewing gameplay.
 - Economics and political mechanics are simplified placeholders with realistic levers to extend later.
