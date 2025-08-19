@@ -1,7 +1,8 @@
-import sys
 import os
-import pygame
+import sys
 from typing import Optional
+
+import pygame
 
 # Game models
 from usa.models import UnitedStates
@@ -9,20 +10,20 @@ from usa.models import UnitedStates
 # --- Pygame setup ---
 pygame.init()
 
-# Screen dimensions
-SCREEN_WIDTH = 1000
-SCREEN_HEIGHT = 700
+# --- Configuration Constants ---
+SCREEN_WIDTH: int = 1000
+SCREEN_HEIGHT: int = 700
+FRAME_RATE: int = 60  # Pygame clock tick rate
 
-# Colors
+# Color definitions
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-GRAY = (200, 200, 200)
 HIGHLIGHT = (60, 120, 255)
 LIGHT_GRAY = (235, 235, 235)
 GREEN = (30, 160, 60)
 RED = (200, 60, 60)
 
-# Fonts
+# Font sizes
 TITLE_FONT = pygame.font.Font(None, 64)
 MENU_FONT = pygame.font.Font(None, 48)
 SMALL_FONT = pygame.font.Font(None, 28)
@@ -37,7 +38,7 @@ pygame.display.set_caption("USA Political Simulation")
 
 # -------- Menu Rendering ---------
 def draw_menu(selected_index: int) -> None:
-    """Draw the main menu with the selected option highlighted."""
+    """Render the main menu and highlight the selected option."""
     screen.fill(WHITE)
 
     # Title
@@ -73,7 +74,7 @@ SAVE_PATH = os.path.join(os.path.dirname(__file__), "simulation_state.json")
 
 
 def draw_game(ui_us: UnitedStates, msg: Optional[str] = None) -> None:
-    """Render a minimal HUD for the simulation state."""
+    """Render a simple HUD displaying macro stats and controls."""
     screen.fill(LIGHT_GRAY)
 
     # Header
@@ -130,14 +131,15 @@ def draw_game(ui_us: UnitedStates, msg: Optional[str] = None) -> None:
 
 
 def game_loop(seed: int = 42, loaded: Optional[UnitedStates] = None) -> None:
-    """Run a minimal interactive loop for the simulation.
+    """Start the simulation loop: handle input, update and redraw screen.
 
-    - SPACE: advance 1 month
-    - A: advance 12 months
-    - E: trigger a random event immediately
-    - S: save to simulation_state.json
-    - L: load from simulation_state.json
-    - ESC: return to main menu
+    Controls:
+      SPACE: advance 1 month
+      A: advance 12 months
+      E: trigger a random event immediately
+      S: save to simulation_state.json
+      L: load from simulation_state.json
+      ESC: return to main menu
     """
     clock = pygame.time.Clock()
     us = loaded if loaded else UnitedStates.new_default(seed=seed)
@@ -151,7 +153,7 @@ def game_loop(seed: int = 42, loaded: Optional[UnitedStates] = None) -> None:
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    running = False  # back to menu
+                    running = False
                 elif event.key == pygame.K_SPACE:
                     us.advance_turn(1)
                     info_msg = "Advanced 1 month"
@@ -161,7 +163,6 @@ def game_loop(seed: int = 42, loaded: Optional[UnitedStates] = None) -> None:
                 elif event.key == pygame.K_e:
                     ev = us.trigger_event()
                     if ev:
-                        # React immediately as in monthly loop
                         us.ai_react_to_events()
                         info_msg = f"Event: {ev.name}"
                     else:
@@ -184,11 +185,12 @@ def game_loop(seed: int = 42, loaded: Optional[UnitedStates] = None) -> None:
 
         draw_game(us, info_msg)
         info_msg = None
-        clock.tick(30)
+        clock.tick(FRAME_RATE)
 
 
 # -------- Main Menu Loop ---------
 def main_menu() -> None:
+    """Main menu: navigate options and launch game or quit."""
     selected_index = 0
     clock = pygame.time.Clock()
 
@@ -246,7 +248,7 @@ def main_menu() -> None:
                     sys.exit()
 
         draw_menu(selected_index)
-        clock.tick(60)
+    clock.tick(FRAME_RATE)
 
 
 if __name__ == "__main__":
