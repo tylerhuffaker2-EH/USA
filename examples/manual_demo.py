@@ -1,4 +1,4 @@
-from usa.models import UnitedStates, Policy, PartyID
+from usa.models import PartyID, Policy, UnitedStates
 
 if __name__ == "__main__":
     us = UnitedStates.new_default(seed=123)

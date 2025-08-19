@@ -1,6 +1,8 @@
-import unittest
 import json
-from usa.models import UnitedStates, PartyID
+import unittest
+
+from usa.models import PartyID, UnitedStates
+
 
 class SmokeTest(unittest.TestCase):
     def test_sim_runs_and_changes_time(self):
@@ -45,5 +47,6 @@ class SmokeTest(unittest.TestCase):
         self.assertAlmostEqual(us_a.unemployment, us_b.unemployment, places=6)
         self.assertAlmostEqual(us_a.inflation, us_b.inflation, places=6)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

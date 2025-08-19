@@ -1,9 +1,22 @@
-import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import sys
 
-from usa.models import UnitedStates, Policy, FederalBudget, PoliticalParty, PartyID, Congress, President, PublicOpinion, SupremeCourt, EventManager
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import random
+
+from usa.models import (
+    Congress,
+    EventManager,
+    FederalBudget,
+    PartyID,
+    Policy,
+    PoliticalParty,
+    President,
+    PublicOpinion,
+    SupremeCourt,
+    UnitedStates,
+)
 
 # Initialize the simulation
 rng = random.Random(7)  # Seed for reproducibility
@@ -11,12 +24,12 @@ usa = UnitedStates(
     year=2025,
     month=8,
     president=None,  # Replace with actual President object
-    congress=None,   # Replace with actual Congress object
-    court=None,      # Replace with actual SupremeCourt object
-    parties={},      # Replace with actual parties
-    states={},       # Replace with actual states
-    budget=None,     # Replace with actual FederalBudget object
-    opinion=None,    # Replace with actual PublicOpinion object
+    congress=None,  # Replace with actual Congress object
+    court=None,  # Replace with actual SupremeCourt object
+    parties={},  # Replace with actual parties
+    states={},  # Replace with actual states
+    budget=None,  # Replace with actual FederalBudget object
+    opinion=None,  # Replace with actual PublicOpinion object
     event_manager=None,  # Replace with actual EventManager object
     rng=rng,
 )
@@ -33,7 +46,9 @@ mock_parties = {
 usa.parties = mock_parties
 
 # Mock Congress object
-mock_congress = Congress(house_control=PartyID.DEMOCRAT, senate_control=PartyID.REPUBLICAN)
+mock_congress = Congress(
+    house_control=PartyID.DEMOCRAT, senate_control=PartyID.REPUBLICAN
+)
 usa.congress = mock_congress
 
 # Mock President object

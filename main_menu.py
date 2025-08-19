@@ -47,7 +47,11 @@ def draw_menu(selected_index: int) -> None:
     screen.blit(title, title_rect)
 
     # Subtitle
-    subtitle = SMALL_FONT.render("Use Up/Down arrows or mouse to select. Enter/Click to confirm.", True, (80, 80, 80))
+    subtitle = SMALL_FONT.render(
+        "Use Up/Down arrows or mouse to select. Enter/Click to confirm.",
+        True,
+        (80, 80, 80),
+    )
     subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, 200))
     screen.blit(subtitle, subtitle_rect)
 
@@ -59,11 +63,19 @@ def draw_menu(selected_index: int) -> None:
         rect = text.get_rect(center=(SCREEN_WIDTH // 2, start_y + i * 70))
         # Hover underline
         if i == selected_index:
-            pygame.draw.line(screen, color, (rect.left, rect.bottom + 4), (rect.right, rect.bottom + 4), 2)
+            pygame.draw.line(
+                screen,
+                color,
+                (rect.left, rect.bottom + 4),
+                (rect.right, rect.bottom + 4),
+                2,
+            )
         screen.blit(text, rect)
 
     # Footer
-    footer = SMALL_FONT.render("GitHub Copilot demo UI — ESC to quit", True, (120, 120, 120))
+    footer = SMALL_FONT.render(
+        "GitHub Copilot demo UI — ESC to quit", True, (120, 120, 120)
+    )
     screen.blit(footer, (20, SCREEN_HEIGHT - 40))
 
     pygame.display.flip()
@@ -78,7 +90,9 @@ def draw_game(ui_us: UnitedStates, msg: Optional[str] = None) -> None:
     screen.fill(LIGHT_GRAY)
 
     # Header
-    header = TITLE_FONT.render(f"Year {ui_us.year}  Month {ui_us.month:02d}", True, BLACK)
+    header = TITLE_FONT.render(
+        f"Year {ui_us.year}  Month {ui_us.month:02d}", True, BLACK
+    )
     screen.blit(header, (30, 20))
 
     # Macro stats
@@ -123,8 +137,12 @@ def draw_game(ui_us: UnitedStates, msg: Optional[str] = None) -> None:
 
     # Message banner
     if msg:
-        banner = SMALL_FONT.render(msg, True, GREEN if "Saved" in msg or "Loaded" in msg else RED)
-        banner_rect = banner.get_rect(right=SCREEN_WIDTH - 20, bottom=SCREEN_HEIGHT - 20)
+        banner = SMALL_FONT.render(
+            msg, True, GREEN if "Saved" in msg or "Loaded" in msg else RED
+        )
+        banner_rect = banner.get_rect(
+            right=SCREEN_WIDTH - 20, bottom=SCREEN_HEIGHT - 20
+        )
         screen.blit(banner, banner_rect)
 
     pygame.display.flip()
@@ -199,7 +217,9 @@ def main_menu() -> None:
         mouse_pos = pygame.mouse.get_pos()
         # Update hover selection
         for i, option in enumerate(MENU_OPTIONS):
-            rect = MENU_FONT.render(option, True, BLACK).get_rect(center=(SCREEN_WIDTH // 2, 280 + i * 70))
+            rect = MENU_FONT.render(option, True, BLACK).get_rect(
+                center=(SCREEN_WIDTH // 2, 280 + i * 70)
+            )
             if rect.collidepoint(mouse_pos):
                 selected_index = i
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import copy
+import random
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict, List, Optional, Tuple, Any
-import random
-import copy
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def _enum_value(e):
@@ -64,7 +64,10 @@ class PoliticalParty:
 
     @classmethod
     def from_dict(cls, data: Dict[str, object]) -> "PoliticalParty":
-        return cls(name=PartyID(data["name"]), national_approval=float(data["national_approval"]))
+        return cls(
+            name=PartyID(data["name"]),
+            national_approval=float(data["national_approval"]),
+        )
 
 
 @dataclass
@@ -108,7 +111,9 @@ class Policy:
 class PublicOpinion:
     approval_president: float = 50.0
     approval_congress: float = 30.0
-    issue_support: Dict[str, float] = field(default_factory=dict)  # policy title -> support 0-100
+    issue_support: Dict[str, float] = field(
+        default_factory=dict
+    )  # policy title -> support 0-100
 
     def update_issue(self, policy: Policy, delta: float) -> None:
         base = self.issue_support.get(policy.title, policy.popularity)
@@ -211,31 +216,49 @@ class State:
     budget_revenue: float = 100.0  # billions
     budget_spending: float = 100.0  # billions
     tax_rate: float = 0.06  # effective state-level tax rate over GDP (approx.)
-    gdp_sectors: Dict[str, float] = field(default_factory=lambda: {
-        "services": 0.65,
-        "industry": 0.27,
-        "agriculture": 0.08,
-    })
+    gdp_sectors: Dict[str, float] = field(
+        default_factory=lambda: {
+            "services": 0.65,
+            "industry": 0.27,
+            "agriculture": 0.08,
+        }
+    )
     voter_cohorts: List[VoterCohort] = field(default_factory=list)
     # Elections
     house_districts: List[District] = field(default_factory=list)
-    senate_seats: List[PartyID] = field(default_factory=lambda: [PartyID.INDEPENDENT, PartyID.INDEPENDENT])
-    senate_classes: List[int] = field(default_factory=lambda: [0, 1])  # Senate class for each seat: 0,1,2
+    senate_seats: List[PartyID] = field(
+        default_factory=lambda: [PartyID.INDEPENDENT, PartyID.INDEPENDENT]
+    )
+    senate_classes: List[int] = field(
+        default_factory=lambda: [0, 1]
+    )  # Senate class for each seat: 0,1,2
     # Statewide lean and turnout bias for dynamic elections
     # Positive values favor Democrats; negative favor Republicans.
-    state_partisan_lean: float = 0.0   # typical range ~[-0.1, 0.1]; shifts baseline probability
-    state_turnout_bias: float = 0.0    # typical range ~[-0.05, 0.05]; adds small turnout-driven tilt
+    state_partisan_lean: float = (
+        0.0  # typical range ~[-0.1, 0.1]; shifts baseline probability
+    )
+    state_turnout_bias: float = (
+        0.0  # typical range ~[-0.05, 0.05]; adds small turnout-driven tilt
+    )
 
     # Simple state economy tick
-    def advance_economy(self, growth: float, nat_inflation: float, rng: random.Random) -> None:
-        gdp_growth = max(-0.1, min(0.1, growth + rng.uniform(-0.01, 0.01)))  # +/- 1pp noise
-        self.gdp *= (1.0 + gdp_growth)
+    def advance_economy(
+        self, growth: float, nat_inflation: float, rng: random.Random
+    ) -> None:
+        gdp_growth = max(
+            -0.1, min(0.1, growth + rng.uniform(-0.01, 0.01))
+        )  # +/- 1pp noise
+        self.gdp *= 1.0 + gdp_growth
         # unemployment mean-reverts to 5-6% with noise and growth sensitivity
         target_u = 5.5 - 0.5 * growth
-        self.unemployment += 0.2 * (target_u - self.unemployment) + rng.uniform(-0.1, 0.1)
+        self.unemployment += 0.2 * (target_u - self.unemployment) + rng.uniform(
+            -0.1, 0.1
+        )
         self.unemployment = max(2.5, min(20.0, self.unemployment))
         # inflation partially driven by national inflation
-        self.inflation = max(0.0, min(20.0, 0.6 * nat_inflation + rng.uniform(-0.2, 0.2)))
+        self.inflation = max(
+            0.0, min(20.0, 0.6 * nat_inflation + rng.uniform(-0.2, 0.2))
+        )
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -277,9 +300,18 @@ class State:
             tax_rate=float(data.get("tax_rate", 0.06)),
             gdp_sectors=dict(data.get("gdp_sectors", {})),
         )
-        st.voter_cohorts = [VoterCohort.from_dict(d) for d in data.get("voter_cohorts", [])]
-        st.house_districts = [District.from_dict(d) for d in data.get("house_districts", [])]
-        st.senate_seats = [PartyID(p) for p in data.get("senate_seats", [PartyID.INDEPENDENT.value, PartyID.INDEPENDENT.value])]
+        st.voter_cohorts = [
+            VoterCohort.from_dict(d) for d in data.get("voter_cohorts", [])
+        ]
+        st.house_districts = [
+            District.from_dict(d) for d in data.get("house_districts", [])
+        ]
+        st.senate_seats = [
+            PartyID(p)
+            for p in data.get(
+                "senate_seats", [PartyID.INDEPENDENT.value, PartyID.INDEPENDENT.value]
+            )
+        ]
         st.senate_classes = list(data.get("senate_classes", [0, 1]))
         st.state_partisan_lean = float(data.get("state_partisan_lean", 0.0))
         st.state_turnout_bias = float(data.get("state_turnout_bias", 0.0))
@@ -297,7 +329,11 @@ class FederalBudget:
         return self.spending - self.revenue
 
     def to_dict(self) -> Dict[str, object]:
-        return {"revenue": self.revenue, "spending": self.spending, "tax_rate": self.tax_rate}
+        return {
+            "revenue": self.revenue,
+            "spending": self.spending,
+            "tax_rate": self.tax_rate,
+        }
 
     @classmethod
     def from_dict(cls, data: Dict[str, object]) -> "FederalBudget":
@@ -314,11 +350,17 @@ class Congress:
     senate_control: PartyID
 
     def to_dict(self) -> Dict[str, object]:
-        return {"house_control": self.house_control.value, "senate_control": self.senate_control.value}
+        return {
+            "house_control": self.house_control.value,
+            "senate_control": self.senate_control.value,
+        }
 
     @classmethod
     def from_dict(cls, data: Dict[str, object]) -> "Congress":
-        return cls(house_control=PartyID(data["house_control"]), senate_control=PartyID(data["senate_control"]))
+        return cls(
+            house_control=PartyID(data["house_control"]),
+            senate_control=PartyID(data["senate_control"]),
+        )
 
 
 @dataclass
@@ -352,11 +394,17 @@ class ElectionResult:
     details: Dict[str, float]
 
     def to_dict(self) -> Dict[str, object]:
-        return {"winner_party": self.winner_party.value, "details": copy.deepcopy(self.details)}
+        return {
+            "winner_party": self.winner_party.value,
+            "details": copy.deepcopy(self.details),
+        }
 
     @classmethod
     def from_dict(cls, data: Dict[str, object]) -> "ElectionResult":
-        return cls(winner_party=PartyID(data["winner_party"]), details=dict(data.get("details", {})))
+        return cls(
+            winner_party=PartyID(data["winner_party"]),
+            details=dict(data.get("details", {})),
+        )
 
 
 @dataclass
@@ -372,7 +420,9 @@ class Election:
         """
         economy_signal = us.growth - us.inflation * 0.2 - us.unemployment * 0.3
         approval_signal = (
-            us.opinion.approval_president - 50.0 if self.office == "President" else us.opinion.approval_congress - 30.0
+            us.opinion.approval_president - 50.0
+            if self.office == "President"
+            else us.opinion.approval_congress - 30.0
         )
         base = 0.5 + 0.02 * economy_signal + 0.01 * approval_signal
         base = max(0.05, min(0.95, base))
@@ -465,10 +515,11 @@ class EventManager:
         self.rng = rng
         self.catalog: Dict[str, Tuple[Event, float]] = {}
         self.pending_events: List[Tuple[str, int]] = []  # (event_key, delay_months)
-        
+
         # Load configuration
         try:
             from .config import ConfigLoader
+
             self.config_loader = ConfigLoader()
             self._load_events_from_config()
         except ImportError:
@@ -478,27 +529,31 @@ class EventManager:
         """Load events from configuration files."""
         if not self.config_loader:
             return
-            
+
         for event_config in self.config_loader.get_all_events():
             # Convert EventConfig to Event
             event = Event(
                 key=event_config.key,
                 name=event_config.name,
                 description=event_config.description,
-                consequences=event_config.consequences
+                consequences=event_config.consequences,
             )
-            
+
             # Apply national effects
             national_effects = event_config.effects.get("national", {})
-            event.impact_approval_president = national_effects.get("impact_approval_president", 0.0)
-            event.impact_approval_congress = national_effects.get("impact_approval_congress", 0.0)
+            event.impact_approval_president = national_effects.get(
+                "impact_approval_president", 0.0
+            )
+            event.impact_approval_congress = national_effects.get(
+                "impact_approval_congress", 0.0
+            )
             event.impact_growth = national_effects.get("impact_growth", 0.0)
             event.impact_unemployment = national_effects.get("impact_unemployment", 0.0)
             event.impact_inflation = national_effects.get("impact_inflation", 0.0)
-            
+
             # Store state effects
             event.state_effects = event_config.effects.get("states", {})
-            
+
             self.register(event, event_config.weight)
 
     def register(self, event: Event, weight: float = 1.0) -> None:
@@ -508,65 +563,76 @@ class EventManager:
         """Check if an event's trigger conditions are met."""
         if not self.config_loader:
             return True
-            
+
         triggers = event_config.triggers
         conditions = triggers.get("conditions", {})
-        
+
         # Check month range
         if "month_range" in conditions:
             start, end = conditions["month_range"]
             if not (start <= us.month <= end):
                 return False
-        
+
         # Check minimum growth
         if "min_growth" in conditions:
             if us.growth < conditions["min_growth"]:
                 return False
-        
+
         # Check minimum approval
         if "min_approval_president" in conditions:
             if us.opinion.approval_president < conditions["min_approval_president"]:
                 return False
-        
+
         # Check for divided government
         if conditions.get("divided_government"):
-            divided = (us.president.party != us.congress.house_control or 
-                      us.president.party != us.congress.senate_control)
+            divided = (
+                us.president.party != us.congress.house_control
+                or us.president.party != us.congress.senate_control
+            )
             if not divided:
                 return False
-        
+
         # Check inflation
         if "min_inflation" in conditions:
             if us.inflation < conditions["min_inflation"]:
                 return False
-        
+
         return True
 
     def random_event(self, us: "UnitedStates" = None) -> Optional[Event]:
         """Select a random event, considering triggers and conditions."""
         if not self.catalog:
             return None
-        
+
         # Process pending chained events first
         if self.pending_events:
-            ready_events = [(key, delay) for key, delay in self.pending_events if delay <= 0]
+            ready_events = [
+                (key, delay) for key, delay in self.pending_events if delay <= 0
+            ]
             if ready_events:
                 event_key, _ = ready_events[0]
-                self.pending_events = [(k, d-1) for k, d in self.pending_events if not (k == event_key and d <= 0)]
+                self.pending_events = [
+                    (k, d - 1)
+                    for k, d in self.pending_events
+                    if not (k == event_key and d <= 0)
+                ]
                 event, _ = self.catalog.get(event_key, (None, 0))
                 if event:
                     return event
-        
+
         # Decrement delays for pending events
-        self.pending_events = [(k, d-1) for k, d in self.pending_events]
-        
+        self.pending_events = [(k, d - 1) for k, d in self.pending_events]
+
         # Filter events based on conditions if US state is provided
         eligible_events = []
-        
+
         if us and self.config_loader:
             for event_key, (event, weight) in self.catalog.items():
                 event_config = self.config_loader.get_event(event_key)
-                if event_config and event_config.triggers.get("random_probability", 0) > 0:
+                if (
+                    event_config
+                    and event_config.triggers.get("random_probability", 0) > 0
+                ):
                     # Check random trigger probability
                     if self.rng.random() < event_config.triggers["random_probability"]:
                         # Check conditions
@@ -578,15 +644,15 @@ class EventManager:
         else:
             # Fallback to all events
             eligible_events = list(self.catalog.values())
-        
+
         if not eligible_events:
             return None
-        
+
         # Weighted random selection
         total_w = sum(w for _, w in eligible_events)
         if total_w <= 0:
             return None
-            
+
         pick = self.rng.uniform(0, total_w)
         acc = 0.0
         for event, w in eligible_events:
@@ -599,7 +665,7 @@ class EventManager:
         """Process the consequences of an event."""
         for consequence in event.consequences:
             consequence_type = consequence.get("type")
-            
+
             if consequence_type == "policy_proposal":
                 self._handle_policy_proposal(consequence, us)
             elif consequence_type == "chain_event":
@@ -609,7 +675,9 @@ class EventManager:
             elif consequence_type == "approval_boost":
                 self._handle_approval_boost(consequence, us)
 
-    def _handle_policy_proposal(self, consequence: Dict[str, Any], us: "UnitedStates") -> None:
+    def _handle_policy_proposal(
+        self, consequence: Dict[str, Any], us: "UnitedStates"
+    ) -> None:
         """Handle policy proposal consequence."""
         if self.rng.random() < consequence.get("probability", 1.0):
             policy_key = consequence.get("policy_key")
@@ -633,45 +701,66 @@ class EventManager:
             delay = consequence.get("delay_months", 0)
             self.pending_events.append((event_key, delay))
 
-    def _handle_party_approval(self, consequence: Dict[str, Any], us: "UnitedStates") -> None:
+    def _handle_party_approval(
+        self, consequence: Dict[str, Any], us: "UnitedStates"
+    ) -> None:
         """Handle party approval adjustment."""
         party_type = consequence.get("party")
         adjustment = consequence.get("adjustment", 0.0)
-        
+
         if party_type == "president_party":
             us.parties[us.president.party].adjust_approval(adjustment)
         elif party_type == "opposition_party":
-            opp = PartyID.REPUBLICAN if us.president.party == PartyID.DEMOCRAT else PartyID.DEMOCRAT
+            opp = (
+                PartyID.REPUBLICAN
+                if us.president.party == PartyID.DEMOCRAT
+                else PartyID.DEMOCRAT
+            )
             us.parties[opp].adjust_approval(adjustment)
 
-    def _handle_approval_boost(self, consequence: Dict[str, Any], us: "UnitedStates") -> None:
+    def _handle_approval_boost(
+        self, consequence: Dict[str, Any], us: "UnitedStates"
+    ) -> None:
         """Handle approval boost consequence."""
         target = consequence.get("target")
         adjustment = consequence.get("adjustment", 0.0)
-        
-        if target == "president":
-            us.opinion.approval_president = max(0, min(100, us.opinion.approval_president + adjustment))
-        elif target == "congress":
-            us.opinion.approval_congress = max(0, min(100, us.opinion.approval_congress + adjustment))
 
-    def _create_policy_from_config(self, policy_config, us: "UnitedStates") -> Optional["Policy"]:
+        if target == "president":
+            us.opinion.approval_president = max(
+                0, min(100, us.opinion.approval_president + adjustment)
+            )
+        elif target == "congress":
+            us.opinion.approval_congress = max(
+                0, min(100, us.opinion.approval_congress + adjustment)
+            )
+
+    def _create_policy_from_config(
+        self, policy_config, us: "UnitedStates"
+    ) -> Optional["Policy"]:
         """Create a Policy object from configuration."""
         # Check requirements
         reqs = policy_config.requirements
-        
-        if "min_approval_president" in reqs and us.opinion.approval_president < reqs["min_approval_president"]:
+
+        if (
+            "min_approval_president" in reqs
+            and us.opinion.approval_president < reqs["min_approval_president"]
+        ):
             return None
         if "max_growth" in reqs and us.growth > reqs["max_growth"]:
             return None
         if "min_inflation" in reqs and us.inflation < reqs["min_inflation"]:
             return None
-        
+
         # Determine sponsor
         sponsor = us.president.party  # default
-        
+
         # Create policy
-        effects = policy_config.effects.get("national", {}) if policy_config.level == "federal" else policy_config.effects.get("state", {})
-        
+        effects = (
+            policy_config.effects.get("national", {})
+            if policy_config.level == "federal"
+            else policy_config.effects.get("state", {})
+        )
+
         return Policy(
             title=policy_config.title,
             description=policy_config.description,
@@ -680,7 +769,7 @@ class EventManager:
             effect_unemployment=effects.get("effect_unemployment", 0.0),
             effect_inflation=effects.get("effect_inflation", 0.0),
             popularity=policy_config.popularity,
-            sponsor_party=sponsor
+            sponsor_party=sponsor,
         )
 
     def to_dict(self) -> Dict[str, object]:
@@ -689,7 +778,7 @@ class EventManager:
                 {"event": ev.to_dict(), "weight": w}
                 for (ev, w) in self.catalog.values()
             ],
-            "pending_events": list(self.pending_events)
+            "pending_events": list(self.pending_events),
         }
 
     @classmethod
@@ -712,6 +801,7 @@ class UnitedStates:
 
     Use `snapshot()` to get a lightweight structured dict for logging/saving.
     """
+
     year: int
     month: int
     president: President
@@ -739,9 +829,21 @@ class UnitedStates:
     def _init_state_elections_if_missing(self, st: State) -> None:
         if not st.voter_cohorts:
             st.voter_cohorts = [
-                VoterCohort(name="Urban Dem", share=0.4, lean=PartyID.DEMOCRAT, turnout=0.62),
-                VoterCohort(name="Suburban Rep", share=0.4, lean=PartyID.REPUBLICAN, turnout=0.61),
-                VoterCohort(name="Independent", share=0.2, lean=PartyID.INDEPENDENT, turnout=0.48),
+                VoterCohort(
+                    name="Urban Dem", share=0.4, lean=PartyID.DEMOCRAT, turnout=0.62
+                ),
+                VoterCohort(
+                    name="Suburban Rep",
+                    share=0.4,
+                    lean=PartyID.REPUBLICAN,
+                    turnout=0.61,
+                ),
+                VoterCohort(
+                    name="Independent",
+                    share=0.2,
+                    lean=PartyID.INDEPENDENT,
+                    turnout=0.48,
+                ),
             ]
         if not st.house_districts:
             # Create 6 districts with slight variations
@@ -753,12 +855,23 @@ class UnitedStates:
                 for c in st.voter_cohorts:
                     delta = self.rng.uniform(-0.05, 0.05)
                     share = max(0.05, min(0.9, c.share + delta))
-                    cohorts.append(VoterCohort(name=c.name, share=share, lean=c.lean, turnout=c.turnout))
+                    cohorts.append(
+                        VoterCohort(
+                            name=c.name, share=share, lean=c.lean, turnout=c.turnout
+                        )
+                    )
                 # normalize shares
                 total = sum(c.share for c in cohorts)
                 for c in cohorts:
                     c.share = c.share / total
-                st.house_districts.append(District(id=f"{st.name}-{i+1}", cohorts=cohorts, turnout_bias=bias, swing=swing))
+                st.house_districts.append(
+                    District(
+                        id=f"{st.name}-{i+1}",
+                        cohorts=cohorts,
+                        turnout_bias=bias,
+                        swing=swing,
+                    )
+                )
         if not st.senate_seats or len(st.senate_seats) != 2:
             st.senate_seats = [st.legislature.senate, st.legislature.senate]
         if not st.senate_classes or len(st.senate_classes) != 2:
@@ -780,7 +893,9 @@ class UnitedStates:
     def _state_signal_dem(self, st: State) -> float:
         gov = (st.approval_governor - 50.0) / 200.0
         leg = (st.approval_legislature - 40.0) / 200.0
-        return gov * (1 if st.governor_party == PartyID.DEMOCRAT else -1) + leg * (1 if st.legislature.house == PartyID.DEMOCRAT else -1)
+        return gov * (1 if st.governor_party == PartyID.DEMOCRAT else -1) + leg * (
+            1 if st.legislature.house == PartyID.DEMOCRAT else -1
+        )
 
     def _district_dem_probability(self, st: State, d: District) -> float:
         """Estimate Democratic win probability for a House district.
@@ -817,12 +932,17 @@ class UnitedStates:
         """Estimate Democratic win probability for statewide races (Senate, Governor)."""
         # Aggregate cohorts statewide
         score = 0.0
-        for c in (st.voter_cohorts or []):
+        for c in st.voter_cohorts or []:
             if c.lean == PartyID.DEMOCRAT:
                 score += c.share * c.turnout * 1.0
             elif c.lean == PartyID.REPUBLICAN:
                 score += c.share * c.turnout * -1.0
-        base = 0.5 + 0.12 * score + 0.5 * self._state_signal_dem(st) + self._national_signal_dem()
+        base = (
+            0.5
+            + 0.12 * score
+            + 0.5 * self._state_signal_dem(st)
+            + self._national_signal_dem()
+        )
         base += st.state_partisan_lean + 0.5 * st.state_turnout_bias
         if incumbent == PartyID.DEMOCRAT:
             base += 0.02
@@ -831,20 +951,34 @@ class UnitedStates:
         base += self.rng.uniform(-0.03, 0.03)
         return max(0.05, min(0.95, base))
 
-    def _update_approvals_after_congress_results(self, prev_house: PartyID, prev_senate: PartyID) -> None:
+    def _update_approvals_after_congress_results(
+        self, prev_house: PartyID, prev_senate: PartyID
+    ) -> None:
         # modest approval adjustments
         if self.congress.house_control != prev_house:
             if self.congress.house_control == self.president.party:
-                self.opinion.approval_president = max(0, min(100, self.opinion.approval_president + 1.0))
-                self.opinion.approval_congress = max(0, min(100, self.opinion.approval_congress + 0.5))
+                self.opinion.approval_president = max(
+                    0, min(100, self.opinion.approval_president + 1.0)
+                )
+                self.opinion.approval_congress = max(
+                    0, min(100, self.opinion.approval_congress + 0.5)
+                )
             else:
-                self.opinion.approval_president = max(0, min(100, self.opinion.approval_president - 1.0))
-                self.opinion.approval_congress = max(0, min(100, self.opinion.approval_congress - 0.5))
+                self.opinion.approval_president = max(
+                    0, min(100, self.opinion.approval_president - 1.0)
+                )
+                self.opinion.approval_congress = max(
+                    0, min(100, self.opinion.approval_congress - 0.5)
+                )
         if self.congress.senate_control != prev_senate:
             if self.congress.senate_control == self.president.party:
-                self.opinion.approval_president = max(0, min(100, self.opinion.approval_president + 0.5))
+                self.opinion.approval_president = max(
+                    0, min(100, self.opinion.approval_president + 0.5)
+                )
             else:
-                self.opinion.approval_president = max(0, min(100, self.opinion.approval_president - 0.5))
+                self.opinion.approval_president = max(
+                    0, min(100, self.opinion.approval_president - 0.5)
+                )
 
     # --- AI stubs ---
     def ai_consider_policy(self) -> Optional[Policy]:
@@ -853,24 +987,25 @@ class UnitedStates:
             # Try to load policies from config first
             try:
                 from .config import ConfigLoader
+
                 config_loader = ConfigLoader()
                 federal_policies = config_loader.get_policies_by_level("federal")
-                
+
                 # Filter policies based on current conditions
                 eligible_policies = []
                 for policy_config in federal_policies:
                     if self._check_policy_requirements(policy_config):
                         eligible_policies.append(policy_config)
-                
+
                 if eligible_policies:
                     # Select based on current needs
                     selected = self._select_best_policy(eligible_policies)
                     if selected:
                         return self._create_policy_from_config(selected)
-                        
+
             except ImportError:
                 pass  # Fall back to hardcoded policies
-            
+
             # Fallback to original hardcoded logic
             if self.growth < 0.0:
                 return Policy(
@@ -907,8 +1042,11 @@ class UnitedStates:
     def _check_policy_requirements(self, policy_config) -> bool:
         """Check if policy requirements are met."""
         reqs = policy_config.requirements
-        
-        if "min_approval_president" in reqs and self.opinion.approval_president < reqs["min_approval_president"]:
+
+        if (
+            "min_approval_president" in reqs
+            and self.opinion.approval_president < reqs["min_approval_president"]
+        ):
             return False
         if "max_growth" in reqs and self.growth > reqs["max_growth"]:
             return False
@@ -916,11 +1054,17 @@ class UnitedStates:
             return False
         if "legislative_control" in reqs:
             required_control = reqs["legislative_control"]
-            if "house" in required_control and self.congress.house_control != self.president.party:
+            if (
+                "house" in required_control
+                and self.congress.house_control != self.president.party
+            ):
                 return False
-            if "senate" in required_control and self.congress.senate_control != self.president.party:
+            if (
+                "senate" in required_control
+                and self.congress.senate_control != self.president.party
+            ):
                 return False
-        
+
         return True
 
     def _select_best_policy(self, eligible_policies) -> Optional[Any]:
@@ -931,29 +1075,35 @@ class UnitedStates:
             for policy in eligible_policies:
                 if "stimulus" in policy.key.lower():
                     return policy
-        
+
         if self.inflation > 4.0:
             # Look for anti-inflation policies
             for policy in eligible_policies:
-                if "austerity" in policy.key.lower() or "restraint" in policy.key.lower():
+                if (
+                    "austerity" in policy.key.lower()
+                    or "restraint" in policy.key.lower()
+                ):
                     return policy
-        
+
         if self.unemployment > 7.0:
             # Look for job creation policies
             for policy in eligible_policies:
-                if any(word in policy.key.lower() for word in ["jobs", "infrastructure", "stimulus"]):
+                if any(
+                    word in policy.key.lower()
+                    for word in ["jobs", "infrastructure", "stimulus"]
+                ):
                     return policy
-        
+
         # Default to most popular policy
         if eligible_policies:
             return max(eligible_policies, key=lambda p: p.popularity)
-        
+
         return None
 
     def _create_policy_from_config(self, policy_config) -> Policy:
         """Create a Policy object from configuration."""
         effects = policy_config.effects.get("national", {})
-        
+
         return Policy(
             title=policy_config.title,
             description=policy_config.description,
@@ -962,7 +1112,7 @@ class UnitedStates:
             effect_unemployment=effects.get("effect_unemployment", 0.0),
             effect_inflation=effects.get("effect_inflation", 0.0),
             popularity=policy_config.popularity,
-            sponsor_party=self.president.party
+            sponsor_party=self.president.party,
         )
 
     # --- state policy process ---
@@ -971,15 +1121,21 @@ class UnitedStates:
         Returns True if policy passes.
         """
         base_support = (policy.popularity - 50.0) / 120.0  # narrower range for states
-        align = 0.12 if policy.sponsor_party in (st.legislature.house, st.legislature.senate) else -0.06
+        align = (
+            0.12
+            if policy.sponsor_party in (st.legislature.house, st.legislature.senate)
+            else -0.06
+        )
         gov_bonus = 0.08 if policy.sponsor_party == st.governor_party else 0.0
         opinion_push = (st.approval_governor - 50.0) / 200.0
         prob = 0.5 + base_support + align + gov_bonus + opinion_push
         prob = max(0.05, min(0.95, prob))
         if self.rng.random() < prob:
             # Apply local effects
-            st.gdp *= (1.0 + policy.effect_growth)
-            st.unemployment = max(2.5, min(20.0, st.unemployment + policy.effect_unemployment))
+            st.gdp *= 1.0 + policy.effect_growth
+            st.unemployment = max(
+                2.5, min(20.0, st.unemployment + policy.effect_unemployment)
+            )
             st.inflation = max(0.0, min(20.0, st.inflation + policy.effect_inflation))
             if policy.cost >= 0:
                 st.budget_spending += policy.cost
@@ -988,7 +1144,9 @@ class UnitedStates:
             # Local approval shifts
             if policy.sponsor_party == st.governor_party:
                 st.approval_governor = max(0.0, min(100.0, st.approval_governor + 0.8))
-            st.approval_legislature = max(0.0, min(100.0, st.approval_legislature + 0.4))
+            st.approval_legislature = max(
+                0.0, min(100.0, st.approval_legislature + 0.4)
+            )
             # National issue awareness
             self.opinion.update_issue(policy, self.rng.uniform(-2.0, 2.0))
             self.log_event(f"{st.name} policy passed: {policy.title}")
@@ -1002,27 +1160,28 @@ class UnitedStates:
         """State AI proposes policies and campaigns based on conditions."""
         # Policy proposal logic with configuration support
         pol: Optional[Policy] = None
-        
+
         try:
             from .config import ConfigLoader
+
             config_loader = ConfigLoader()
             state_policies = config_loader.get_policies_by_level("state")
-            
+
             # Filter policies based on state conditions
             eligible_policies = []
             for policy_config in state_policies:
                 if self._check_state_policy_requirements(policy_config, st):
                     eligible_policies.append(policy_config)
-            
+
             if eligible_policies:
                 # Select best policy for current state conditions
                 selected = self._select_best_state_policy(eligible_policies, st)
                 if selected:
                     pol = self._create_state_policy_from_config(selected, st)
-                    
+
         except ImportError:
             pass  # Fall back to hardcoded policies
-        
+
         # Fallback to hardcoded logic if no config policy found
         if not pol:
             if st.unemployment > 6.5:
@@ -1067,7 +1226,7 @@ class UnitedStates:
                         popularity=64.0,
                         sponsor_party=st.governor_party,
                     )
-        
+
         if pol:
             self.attempt_pass_state_policy(st, pol)
 
@@ -1078,8 +1237,12 @@ class UnitedStates:
             party = st.governor_party
             adj = 0.004 if party == PartyID.DEMOCRAT else -0.004
             for d in st.house_districts:
-                d.swing = max(-0.2, min(0.2, d.swing + adj + self.rng.uniform(-0.002, 0.002)))
-                d.turnout_bias = max(-0.1, min(0.1, d.turnout_bias + self.rng.uniform(-0.002, 0.002)))
+                d.swing = max(
+                    -0.2, min(0.2, d.swing + adj + self.rng.uniform(-0.002, 0.002))
+                )
+                d.turnout_bias = max(
+                    -0.1, min(0.1, d.turnout_bias + self.rng.uniform(-0.002, 0.002))
+                )
             # small approval nudges
             st.approval_governor = max(0, min(100, st.approval_governor + 0.2))
             st.approval_legislature = max(0, min(100, st.approval_legislature + 0.1))
@@ -1087,14 +1250,17 @@ class UnitedStates:
     def _check_state_policy_requirements(self, policy_config, st: State) -> bool:
         """Check if state policy requirements are met."""
         reqs = policy_config.requirements
-        
+
         if "min_unemployment" in reqs and st.unemployment < reqs["min_unemployment"]:
             return False
         if "min_inflation" in reqs and st.inflation < reqs["min_inflation"]:
             return False
-        if "min_deficit" in reqs and (st.budget_spending - st.budget_revenue) < reqs["min_deficit"]:
+        if (
+            "min_deficit" in reqs
+            and (st.budget_spending - st.budget_revenue) < reqs["min_deficit"]
+        ):
             return False
-        
+
         return True
 
     def _select_best_state_policy(self, eligible_policies, st: State) -> Optional[Any]:
@@ -1104,27 +1270,27 @@ class UnitedStates:
             for policy in eligible_policies:
                 if "jobs" in policy.key.lower():
                     return policy
-        
+
         if st.inflation > 5.0:
             for policy in eligible_policies:
                 if "freeze" in policy.key.lower():
                     return policy
-        
+
         if st.budget_spending - st.budget_revenue > 5.0:
             for policy in eligible_policies:
                 if "balance" in policy.key.lower():
                     return policy
-        
+
         # Default to most popular policy
         if eligible_policies:
             return max(eligible_policies, key=lambda p: p.popularity)
-        
+
         return None
 
     def _create_state_policy_from_config(self, policy_config, st: State) -> Policy:
         """Create a state Policy object from configuration."""
         effects = policy_config.effects.get("state", {})
-        
+
         return Policy(
             title=policy_config.title,
             description=policy_config.description,
@@ -1133,17 +1299,21 @@ class UnitedStates:
             effect_unemployment=effects.get("effect_unemployment", 0.0),
             effect_inflation=effects.get("effect_inflation", 0.0),
             popularity=policy_config.popularity,
-            sponsor_party=st.governor_party
+            sponsor_party=st.governor_party,
         )
 
     # --- AI: national party strategy placeholders ---
     def ai_party_national_strategy(self) -> None:
         """Tweak party approvals and focus based on macro context."""
-        deficit_ratio = (self.budget.spending - self.budget.revenue) / max(1.0, self.budget.revenue)
+        deficit_ratio = (self.budget.spending - self.budget.revenue) / max(
+            1.0, self.budget.revenue
+        )
         econ = self.growth - 0.2 * self.inflation - 0.3 * self.unemployment
         # Dems gain on growth, Reps gain on inflation/deficit concerns (simplified heuristic)
         self.parties[PartyID.DEMOCRAT].adjust_approval(0.2 * econ)
-        self.parties[PartyID.REPUBLICAN].adjust_approval(0.5 * (0.02 - econ) + 0.5 * deficit_ratio)
+        self.parties[PartyID.REPUBLICAN].adjust_approval(
+            0.5 * (0.02 - econ) + 0.5 * deficit_ratio
+        )
 
     def ai_react_to_events(self) -> None:
         """Propose actions or campaign messages in response to recent events."""
@@ -1169,11 +1339,15 @@ class UnitedStates:
                     self.ai_state_turn(st)
         elif recent == "scandal":
             # Opposing party campaigns nationally on the scandal
-            opp = PartyID.REPUBLICAN if self.president.party == PartyID.DEMOCRAT else PartyID.DEMOCRAT
+            opp = (
+                PartyID.REPUBLICAN
+                if self.president.party == PartyID.DEMOCRAT
+                else PartyID.DEMOCRAT
+            )
             self.parties[opp].adjust_approval(1.5)  # Stronger impact
             self.log_event(f"{opp.value}s capitalize on presidential scandal.")
         # Other events could be handled similarly
-        self.recent_events.clear() # Events are handled, clear the queue
+        self.recent_events.clear()  # Events are handled, clear the queue
 
     # --- policy process ---
     def attempt_pass_policy(self, policy: Policy) -> bool:
@@ -1181,22 +1355,37 @@ class UnitedStates:
         Returns True if policy passes.
         """
         base_support = (policy.popularity - 50.0) / 100.0  # -0.5..+0.5
-        alignment = 0.15 if policy.sponsor_party in (self.congress.house_control, self.congress.senate_control) else -0.05
+        alignment = (
+            0.15
+            if policy.sponsor_party
+            in (self.congress.house_control, self.congress.senate_control)
+            else -0.05
+        )
         pres_bonus = 0.1 if policy.sponsor_party == self.president.party else 0.0
-        court_risk = -0.05 if policy.effect_inflation > 0.7 and self.court.lean != policy.sponsor_party else 0.0
+        court_risk = (
+            -0.05
+            if policy.effect_inflation > 0.7 and self.court.lean != policy.sponsor_party
+            else 0.0
+        )
         prob = 0.5 + base_support + alignment + pres_bonus + court_risk
         prob = max(0.05, min(0.95, prob))
         if self.rng.random() < prob:
             # apply macro effects
             self.growth += policy.effect_growth
-            self.unemployment = max(2.5, min(20.0, self.unemployment + policy.effect_unemployment))
-            self.inflation = max(0.0, min(20.0, self.inflation + policy.effect_inflation))
+            self.unemployment = max(
+                2.5, min(20.0, self.unemployment + policy.effect_unemployment)
+            )
+            self.inflation = max(
+                0.0, min(20.0, self.inflation + policy.effect_inflation)
+            )
             self.budget.spending += max(0.0, policy.cost)
             self.budget.revenue += max(0.0, -policy.cost)  # negative cost means savings
             self.opinion.update_issue(policy, self.rng.uniform(-5, 5))
             # approvals shift modestly toward sponsor party success
             if policy.sponsor_party == self.president.party:
-                self.opinion.approval_president = max(0.0, min(100.0, self.opinion.approval_president + 1.0))
+                self.opinion.approval_president = max(
+                    0.0, min(100.0, self.opinion.approval_president + 1.0)
+                )
             self.log_event(f"Policy passed: {policy.title}")
             return True
         else:
@@ -1223,13 +1412,19 @@ class UnitedStates:
             for st in self.states.values():
                 for d in st.house_districts:
                     p_dem = self._district_dem_probability(st, d)
-                    winner = PartyID.DEMOCRAT if self.rng.random() < p_dem else PartyID.REPUBLICAN
+                    winner = (
+                        PartyID.DEMOCRAT
+                        if self.rng.random() < p_dem
+                        else PartyID.REPUBLICAN
+                    )
                     d.incumbent = winner
                     if winner == PartyID.DEMOCRAT:
                         dem_seats += 1
                     else:
                         rep_seats += 1
-            self.congress.house_control = PartyID.DEMOCRAT if dem_seats >= rep_seats else PartyID.REPUBLICAN
+            self.congress.house_control = (
+                PartyID.DEMOCRAT if dem_seats >= rep_seats else PartyID.REPUBLICAN
+            )
             self.log_event(f"House elections (granular): D {dem_seats} - R {rep_seats}")
 
         # Senate: 6-year terms staggered across 3 classes (0,1,2).
@@ -1245,7 +1440,11 @@ class UnitedStates:
                 inc = st.senate_seats[i]
                 if sen_cycle is not None and st.senate_classes[i] == sen_cycle:
                     p_dem = self._statewide_dem_probability(st, inc)
-                    winner = PartyID.DEMOCRAT if self.rng.random() < p_dem else PartyID.REPUBLICAN
+                    winner = (
+                        PartyID.DEMOCRAT
+                        if self.rng.random() < p_dem
+                        else PartyID.REPUBLICAN
+                    )
                     st.senate_seats[i] = winner
             # count totals after possible updates
             for seat in st.senate_seats:
@@ -1254,12 +1453,18 @@ class UnitedStates:
                 elif seat == PartyID.REPUBLICAN:
                     rep_total += 1
         if dem_total or rep_total:
-            self.congress.senate_control = PartyID.DEMOCRAT if dem_total >= rep_total else PartyID.REPUBLICAN
-            self.log_event(f"Senate elections (staggered): D {dem_total} - R {rep_total}")
+            self.congress.senate_control = (
+                PartyID.DEMOCRAT if dem_total >= rep_total else PartyID.REPUBLICAN
+            )
+            self.log_event(
+                f"Senate elections (staggered): D {dem_total} - R {rep_total}"
+            )
 
         # President every 4 years
         if year % 4 == 0:
-            result_pres = Election(level="federal", office="President", year=year).run(self, self.rng)
+            result_pres = Election(level="federal", office="President", year=year).run(
+                self, self.rng
+            )
             self.president.party = result_pres.winner_party
             self.log_event(f"Presidential election: {result_pres.winner_party.value}")
 
@@ -1268,35 +1473,48 @@ class UnitedStates:
 
     # --- events ---
     def trigger_event(self) -> Optional[Event]:
-        ev = self.event_manager.random_event(self)  # Pass self to enable condition checking
+        ev = self.event_manager.random_event(
+            self
+        )  # Pass self to enable condition checking
         if not ev:
             return None
-        
+
         # Apply national effects
         self.growth += ev.impact_growth
-        self.unemployment = max(2.5, min(20.0, self.unemployment + ev.impact_unemployment))
+        self.unemployment = max(
+            2.5, min(20.0, self.unemployment + ev.impact_unemployment)
+        )
         self.inflation = max(0.0, min(20.0, self.inflation + ev.impact_inflation))
-        self.opinion.approval_president = max(0.0, min(100.0, self.opinion.approval_president + ev.impact_approval_president))
-        self.opinion.approval_congress = max(0.0, min(100.0, self.opinion.approval_congress + ev.impact_approval_congress))
-        
+        self.opinion.approval_president = max(
+            0.0,
+            min(100.0, self.opinion.approval_president + ev.impact_approval_president),
+        )
+        self.opinion.approval_congress = max(
+            0.0,
+            min(100.0, self.opinion.approval_congress + ev.impact_approval_congress),
+        )
+
         # Apply state-specific effects
         for state_name, effects in ev.state_effects.items():
             state = self.states.get(state_name)
             if state:
                 if "impact_gdp" in effects:
-                    state.gdp *= (1.0 + effects["impact_gdp"])
+                    state.gdp *= 1.0 + effects["impact_gdp"]
                 if "impact_unemployment" in effects:
-                    state.unemployment = max(2.5, min(20.0, state.unemployment + effects["impact_unemployment"]))
-        
+                    state.unemployment = max(
+                        2.5,
+                        min(20.0, state.unemployment + effects["impact_unemployment"]),
+                    )
+
         # Handle party benefit
         if ev.party_benefit and ev.party_benefit in self.parties:
             self.parties[ev.party_benefit].adjust_approval(1.0)
-        
+
         self.log_event(f"Event: {ev.description}")
-        
+
         # Process consequences
         self.event_manager.process_event_consequences(ev, self)
-        
+
         # Track recent events by key for AI
         self.recent_events.append(ev.key)
         if len(self.recent_events) > 12:
@@ -1321,7 +1539,9 @@ class UnitedStates:
                 # simplistic public finance update for states
                 st.budget_revenue = st.tax_rate * st.gdp
                 # spending mean-reverts toward revenue with small noise
-                st.budget_spending += 0.2 * (st.budget_revenue - st.budget_spending) + self.rng.uniform(-1.0, 1.0)
+                st.budget_spending += 0.2 * (
+                    st.budget_revenue - st.budget_spending
+                ) + self.rng.uniform(-1.0, 1.0)
 
             # AI policy consideration
             pol = self.ai_consider_policy()
@@ -1341,10 +1561,18 @@ class UnitedStates:
             self.maybe_run_elections()
 
             # approvals mean reversion
-            self.opinion.approval_president += 0.05 * (50.0 - self.opinion.approval_president)
-            self.opinion.approval_congress += 0.05 * (40.0 - self.opinion.approval_congress)
-            self.opinion.approval_president = max(0.0, min(100.0, self.opinion.approval_president))
-            self.opinion.approval_congress = max(0.0, min(100.0, self.opinion.approval_congress))
+            self.opinion.approval_president += 0.05 * (
+                50.0 - self.opinion.approval_president
+            )
+            self.opinion.approval_congress += 0.05 * (
+                40.0 - self.opinion.approval_congress
+            )
+            self.opinion.approval_president = max(
+                0.0, min(100.0, self.opinion.approval_president)
+            )
+            self.opinion.approval_congress = max(
+                0.0, min(100.0, self.opinion.approval_congress)
+            )
 
             # national party strategic drift
             if self.rng.random() < 0.5:
@@ -1366,8 +1594,12 @@ class UnitedStates:
         rng = random.Random(seed)
         parties = {
             PartyID.DEMOCRAT: PoliticalParty(PartyID.DEMOCRAT, national_approval=52.0),
-            PartyID.REPUBLICAN: PoliticalParty(PartyID.REPUBLICAN, national_approval=48.0),
-            PartyID.INDEPENDENT: PoliticalParty(PartyID.INDEPENDENT, national_approval=35.0),
+            PartyID.REPUBLICAN: PoliticalParty(
+                PartyID.REPUBLICAN, national_approval=48.0
+            ),
+            PartyID.INDEPENDENT: PoliticalParty(
+                PartyID.INDEPENDENT, national_approval=35.0
+            ),
         }
         states = {
             "California": State(
@@ -1377,7 +1609,9 @@ class UnitedStates:
                 unemployment=4.8,
                 inflation=2.8,
                 governor_party=PartyID.DEMOCRAT,
-                legislature=LegislatureControl(house=PartyID.DEMOCRAT, senate=PartyID.DEMOCRAT),
+                legislature=LegislatureControl(
+                    house=PartyID.DEMOCRAT, senate=PartyID.DEMOCRAT
+                ),
             ),
             "Texas": State(
                 name="Texas",
@@ -1386,7 +1620,9 @@ class UnitedStates:
                 unemployment=4.0,
                 inflation=2.5,
                 governor_party=PartyID.REPUBLICAN,
-                legislature=LegislatureControl(house=PartyID.REPUBLICAN, senate=PartyID.REPUBLICAN),
+                legislature=LegislatureControl(
+                    house=PartyID.REPUBLICAN, senate=PartyID.REPUBLICAN
+                ),
             ),
             "Florida": State(
                 name="Florida",
@@ -1395,7 +1631,9 @@ class UnitedStates:
                 unemployment=3.5,
                 inflation=2.6,
                 governor_party=PartyID.REPUBLICAN,
-                legislature=LegislatureControl(house=PartyID.REPUBLICAN, senate=PartyID.REPUBLICAN),
+                legislature=LegislatureControl(
+                    house=PartyID.REPUBLICAN, senate=PartyID.REPUBLICAN
+                ),
             ),
             "New York": State(
                 name="New York",
@@ -1404,7 +1642,9 @@ class UnitedStates:
                 unemployment=4.2,
                 inflation=2.7,
                 governor_party=PartyID.DEMOCRAT,
-                legislature=LegislatureControl(house=PartyID.DEMOCRAT, senate=PartyID.DEMOCRAT),
+                legislature=LegislatureControl(
+                    house=PartyID.DEMOCRAT, senate=PartyID.DEMOCRAT
+                ),
             ),
         }
         # Initialize election structures for each state
@@ -1417,9 +1657,24 @@ class UnitedStates:
         for st in states.values():
             if not st.voter_cohorts:
                 st.voter_cohorts = [
-                    VoterCohort(name="Urban Dem", share=0.42, lean=PartyID.DEMOCRAT, turnout=0.62),
-                    VoterCohort(name="Suburban Rep", share=0.40, lean=PartyID.REPUBLICAN, turnout=0.61),
-                    VoterCohort(name="Independent", share=0.18, lean=PartyID.INDEPENDENT, turnout=0.48),
+                    VoterCohort(
+                        name="Urban Dem",
+                        share=0.42,
+                        lean=PartyID.DEMOCRAT,
+                        turnout=0.62,
+                    ),
+                    VoterCohort(
+                        name="Suburban Rep",
+                        share=0.40,
+                        lean=PartyID.REPUBLICAN,
+                        turnout=0.61,
+                    ),
+                    VoterCohort(
+                        name="Independent",
+                        share=0.18,
+                        lean=PartyID.INDEPENDENT,
+                        turnout=0.48,
+                    ),
                 ]
             if not st.house_districts:
                 # Create 6 basic districts with minor swings
@@ -1431,11 +1686,22 @@ class UnitedStates:
                     for c in st.voter_cohorts:
                         delta = rnd.uniform(-0.05, 0.05)
                         share = max(0.05, min(0.9, c.share + delta))
-                        cohorts.append(VoterCohort(name=c.name, share=share, lean=c.lean, turnout=c.turnout))
+                        cohorts.append(
+                            VoterCohort(
+                                name=c.name, share=share, lean=c.lean, turnout=c.turnout
+                            )
+                        )
                     total = sum(c.share for c in cohorts)
                     for c in cohorts:
                         c.share = c.share / total
-                    st.house_districts.append(District(id=f"{st.name}-{i+1}", cohorts=cohorts, turnout_bias=bias, swing=swing))
+                    st.house_districts.append(
+                        District(
+                            id=f"{st.name}-{i+1}",
+                            cohorts=cohorts,
+                            turnout_bias=bias,
+                            swing=swing,
+                        )
+                    )
             if not st.senate_seats or len(st.senate_seats) != 2:
                 st.senate_seats = [st.legislature.senate, st.legislature.senate]
             if not st.senate_classes or len(st.senate_classes) != 2:
@@ -1452,15 +1718,47 @@ class UnitedStates:
                 st.state_turnout_bias = rnd4.uniform(-0.03, 0.03)
         budget = FederalBudget(revenue=4500.0, spending=5200.0)
         president = President(name="Incumbent", party=PartyID.DEMOCRAT)
-        congress = Congress(house_control=PartyID.DEMOCRAT, senate_control=PartyID.DEMOCRAT)
+        congress = Congress(
+            house_control=PartyID.DEMOCRAT, senate_control=PartyID.DEMOCRAT
+        )
         court = SupremeCourt(lean=PartyID.REPUBLICAN)
         opinion = PublicOpinion(approval_president=51.0, approval_congress=38.0)
         em = EventManager(rng)
         # register some events
-        em.register(Event(key="hurricane", description="Major hurricane hits Gulf Coast", impact_growth=-0.003, impact_unemployment=0.2, impact_inflation=0.1))
-        em.register(Event(key="tech_boom", description="Tech productivity boom", impact_growth=0.004, impact_unemployment=-0.15, impact_inflation=0.0), weight=0.6)
-        em.register(Event(key="scandal", description="Political scandal", impact_approval_president=-2.5, party_benefit=PartyID.REPUBLICAN))
-        em.register(Event(key="bipartisan", description="Bipartisan breakthrough", impact_approval_congress=2.0))
+        em.register(
+            Event(
+                key="hurricane",
+                description="Major hurricane hits Gulf Coast",
+                impact_growth=-0.003,
+                impact_unemployment=0.2,
+                impact_inflation=0.1,
+            )
+        )
+        em.register(
+            Event(
+                key="tech_boom",
+                description="Tech productivity boom",
+                impact_growth=0.004,
+                impact_unemployment=-0.15,
+                impact_inflation=0.0,
+            ),
+            weight=0.6,
+        )
+        em.register(
+            Event(
+                key="scandal",
+                description="Political scandal",
+                impact_approval_president=-2.5,
+                party_benefit=PartyID.REPUBLICAN,
+            )
+        )
+        em.register(
+            Event(
+                key="bipartisan",
+                description="Bipartisan breakthrough",
+                impact_approval_congress=2.0,
+            )
+        )
         return UnitedStates(
             year=2025,
             month=1,
@@ -1519,7 +1817,9 @@ class UnitedStates:
                 }
                 for name, st in self.states.items()
             },
-            "parties": {pid.value: p.national_approval for pid, p in self.parties.items()},
+            "parties": {
+                pid.value: p.national_approval for pid, p in self.parties.items()
+            },
             "log_tail": self.log[-last_logs:],
         }
 
@@ -1555,7 +1855,10 @@ class UnitedStates:
         rng_state = data.get("rng_state")
         if rng_state is not None:
             rng.setstate(_tupleify(rng_state))
-        parties = {PartyID(k): PoliticalParty.from_dict(v) for k, v in data.get("parties", {}).items()}
+        parties = {
+            PartyID(k): PoliticalParty.from_dict(v)
+            for k, v in data.get("parties", {}).items()
+        }
         states = {k: State.from_dict(v) for k, v in data.get("states", {}).items()}
         em = EventManager.from_dict(data.get("events", {}), rng)
         us = cls(
@@ -1578,18 +1881,18 @@ class UnitedStates:
         us.recent_events = list(data.get("recent_events", []))
         return us
 
-    
-
     def save_to_file(self, file_path: str) -> None:
         """Save the current state to a JSON file."""
         import json
-        with open(file_path, 'w') as f:
+
+        with open(file_path, "w") as f:
             json.dump(self.to_dict(), f, indent=4)
 
     @classmethod
     def load_from_file(cls, file_path: str) -> "UnitedStates":
         """Load the state from a JSON file."""
         import json
-        with open(file_path, 'r') as f:
+
+        with open(file_path, "r") as f:
             data = json.load(f)
         return cls.from_dict(data)

@@ -1,12 +1,19 @@
 import argparse
+
 from usa.models import UnitedStates
 
 
 def main():
     parser = argparse.ArgumentParser(description="USA Simulation CLI")
-    parser.add_argument("--seed", type=int, default=0, help="Random seed for simulation")
-    parser.add_argument("--turns", type=int, default=1, help="Number of turns to advance")
-    parser.add_argument("--snapshot", action="store_true", help="Print a snapshot of the current state")
+    parser.add_argument(
+        "--seed", type=int, default=0, help="Random seed for simulation"
+    )
+    parser.add_argument(
+        "--turns", type=int, default=1, help="Number of turns to advance"
+    )
+    parser.add_argument(
+        "--snapshot", action="store_true", help="Print a snapshot of the current state"
+    )
 
     args = parser.parse_args()
 
